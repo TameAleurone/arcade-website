@@ -3,23 +3,61 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Arcade Hub — a collection of quick browser games.">
 <title>Arcade Hub</title>
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="homepage">
 <div id="app">
-  <header>
-    <!-- use python -m http.server 8000 -->  
-    <h1>ARCADE HUB</h1>
-    <p>A little collection of games &mdash; click a tile to play</p>
+  <header class="hero">
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="eyebrow"><span class="status-dot"></span> GAME ON</div>
+    <h1>ARCADE <span>HUB</span></h1>
+    <p>Quick games, classic challenges, and a few weird ones.</p>
+    <div class="hero-stats" aria-label="Arcade statistics">
+      <div class="hero-stat"><strong id="game-count">0</strong><span>games</span></div>
+      <div class="hero-stat"><strong>∞</strong><span>fun</span></div>
+      <div class="hero-stat"><strong>100%</strong><span>browser</span></div>
+    </div>
   </header>
 
-  <div id="menu-view">
-    <div class="section-label">Ready to play</div>
-    <div id="menu-grid"></div>
-  </div>
+  <main id="menu-view">
+    <div class="toolbar">
+      <div>
+        <div class="section-label">Choose your game</div>
+        <p class="section-subtitle">Pick a tile and start playing.</p>
+      </div>
+      <label class="search-box">
+        <span aria-hidden="true">⌕</span>
+        <input id="game-search" type="search" placeholder="Search games..." autocomplete="off">
+      </label>
+    </div>
 
-  <footer>Arcade Hub &mdash; web edition. 28 games, each its own page.</footer>
+    <div class="filters" role="group" aria-label="Game categories">
+      <button class="filter active" data-filter="all">All games</button>
+      <button class="filter" data-filter="arcade">Arcade</button>
+      <button class="filter" data-filter="puzzle">Puzzle</button>
+      <button class="filter" data-filter="action">Action</button>
+      <button class="filter" data-filter="multiplayer">Multiplayer</button>
+      <button class="filter" data-filter="chess">Chess</button>
+    </div>
+
+    <div id="results-note" class="results-note" aria-live="polite"></div>
+    <div id="menu-grid"></div>
+    <div id="no-results" class="no-results hidden">
+      <div class="no-results-icon">🎮</div>
+      <h2>No games found</h2>
+      <p>Try another search or switch back to all games.</p>
+    </div>
+  </main>
+
+  <footer>
+    <span>ARCADE HUB</span>
+    <span>•</span>
+    <span id="footer-count">0 games</span>
+    <span>•</span>
+    <span>Made for the web</span>
+  </footer>
 </div>
 
 <script src="main.js"></script>
@@ -42,7 +80,63 @@
 <script src="dwarves.js"></script>
 <script src="hub.js"></script>
 <script>
-renderLinkMenu(document.getElementById('menu-grid'), g => g.id + '.html');
+const grid = document.getElementById('menu-grid');
+const search = document.getElementById('game-search');
+const countEl = document.getElementById('game-count');
+const footerCount = document.getElementById('footer-count');
+const resultsNote = document.getElementById('results-note');
+const noResults = document.getElementById('no-results');
+const filters = [...document.querySelectorAll('.filter')];
+
+const categories = {
+  '2048': 'puzzle', snake: 'arcade', memory: 'puzzle', breakout: 'arcade',
+  minesweeper: 'puzzle', reflex: 'action', stats_hub: 'arcade', two_player_hub: 'multiplayer',
+  dodger: 'action', dino: 'arcade', flyer: 'action', wheel: 'arcade', tetris: 'puzzle',
+  clicker: 'arcade', idle_miner: 'arcade', mario: 'arcade', dwarves: 'action',
+  chess_hub: 'chess', connect_four: 'multiplayer', tictactoe: 'multiplayer', pong: 'multiplayer'
+};
+
+let activeFilter = 'all';
+
+function renderHomeMenu() {
+  const query = search.value.trim().toLowerCase();
+  const games = Object.values(Games).filter(g => !g.hidden && g.ready);
+  const visible = games.filter(g => {
+    const category = categories[g.id] || 'arcade';
+    const matchesFilter = activeFilter === 'all' || category === activeFilter;
+    const matchesSearch = !query || g.name.toLowerCase().includes(query);
+    return matchesFilter && matchesSearch;
+  });
+
+  grid.innerHTML = visible.map(g => `
+    <a class="tile" href="${g.id}.html" data-category="${categories[g.id] || 'arcade'}">
+      <span class="badge">PLAY <span class="arrow">↗</span></span>
+      <span class="icon-wrap"><span class="icon">${g.icon}</span></span>
+      <span class="name">${g.name}</span>
+      <span class="best">${g.best ? g.best() : ''}</span>
+      <span class="tile-line" aria-hidden="true"></span>
+    </a>
+  `).join('');
+
+  countEl.textContent = games.length;
+  footerCount.textContent = `${games.length} games`;
+  resultsNote.textContent = visible.length === games.length && activeFilter === 'all' && !query
+    ? `${games.length} games ready to play`
+    : `${visible.length} ${visible.length === 1 ? 'game' : 'games'} shown`;
+  noResults.classList.toggle('hidden', visible.length !== 0);
+}
+
+filters.forEach(button => {
+  button.addEventListener('click', () => {
+    filters.forEach(b => b.classList.remove('active'));
+    button.classList.add('active');
+    activeFilter = button.dataset.filter;
+    renderHomeMenu();
+  });
+});
+
+search.addEventListener('input', renderHomeMenu);
+renderHomeMenu();
 </script>
 </body>
 </html>
