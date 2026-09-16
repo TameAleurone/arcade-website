@@ -60,11 +60,6 @@ function renderLinkMenu(gridEl, hrefFor, filter){
  */
 function bootGame(id){
   const g = Games[id];
-  if(g){
-    const recent = Store.get('recent', []).filter(x => x !== id);
-    recent.unshift(id);
-    Store.set('recent', recent.slice(0, 8));
-  }
   const container = document.getElementById('game-container');
   const titleEl = document.getElementById('game-title');
   if(!g){
@@ -91,21 +86,11 @@ function setupEscapeToHub(){
 }
 setupEscapeToHub();
 
-// Shared theme preference across the hub and game pages.
-(function(){
-  const saved = Store.get('theme', 'dark');
-  document.body.classList.toggle('light', saved === 'light');
-})();
-
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    // main.js is loaded from both the site root (index.html) and one
-    // level down (games/*.html), but sw.js only lives at the root, so
-    // the registration path/scope has to adapt to how deep we are.
-    const inGamesDir = location.pathname.includes('/games/');
-    const swPath = inGamesDir ? '../sw.js' : './sw.js';
-    const swScope = inGamesDir ? '../' : './';
-    navigator.serviceWorker.register(swPath, {scope: swScope})
+    // All pages live at the site root, so the service worker always
+    // registers from the root and controls the whole arcade.
+    navigator.serviceWorker.register('./sw.js', {scope: './'})
       .then((reg) => console.log('Service Worker registered successfully:', reg.scope))
       .catch((err) => console.error('Service Worker registration failed:', err));
   });

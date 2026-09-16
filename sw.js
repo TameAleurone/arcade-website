@@ -1,85 +1,32 @@
-const CACHE_NAME = 'arcade-v1';
+const CACHE_NAME = 'arcade-v2';
 
-// List of all static assets to cache for offline access
-const ASSETS_TO_CACHE = [
-  './',
-  './index.html',
-  './css/style.css',
-  './js/main.js',
-  './js/games/stats.js',
-  './games/chess_hub.html',
-  './games/two_player_hub.html',
-  './games/stats_hub.html',
-  './games/2048.html',
-  './games/antichess.html',
-  './games/breakout.html',
-  './games/chess.html',
-  './games/clicker.html',
-  './games/connect_four.html',
-  './games/dice_chess.html',
-  './games/dino.html',
-  './games/dodger.html',
-  './games/drawback_chess.html',
-  './games/dwarves.html',
-  './games/fischer_random.html',
-  './games/flyer.html',
-  './games/idle_miner.html',
-  './games/mario.html',
-  './games/memory.html',
-  './games/minesweeper.html',
-  './games/pong.html',
-  './games/reflex.html',
-  './games/snake.html',
-  './games/spell_chess.html',
-  './games/tetris.html',
-  './games/three_player_chess.html',
-  './games/tictactoe.html',
-  './games/wheel.html'
-];
+const ASSETS_TO_CACHE = ['./', './index.html', './2048.html', './antichess.html', './b.png', './breakout.html', './breakout.js', './chess.html', './chess_hub.html', './clicker.html', './clicker.js', './connect_four.html', './connectfour.js', './d_b.png', './d_k.png', './d_n.png', './d_p.png', './d_q.png', './d_r.png', './dice_chess.html', './dino.html', './dino.js', './dodger.html', './dodger.js', './drawback_chess.html', './drawbacks.js', './dwarves.html', './dwarves.js', './engine.js', './fischer_random.html', './flyer.html', './flyer.js', './game2048.js', './hub.js', './idle_miner.html', './idle_miner.js', './k.png', './main.js', './manifest.json', './mario.html', './mario.js', './memory.html', './memory.js', './minesweeper.html', './minesweeper.js', './n.png', './p.png', './pong.html', './pong.js', './q.png', './r.png', './reflex.html', './reflex.js', './snake.html', './snake.js', './spell_chess.html', './stats.js', './stats_hub.html', './style.css', './tetris.html', './tetris.js', './three-player.js', './three_player_chess.html', './tictactoe.html', './tictactoe.js', './two_player_hub.html', './two_player_hub.js', './variant-ui.js', './wheel.html', './wheel.js'];
 
-// Cache all assets on installation
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
   );
   self.skipWaiting();
 });
 
-// Purge obsolete caches on activation
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
-        })
-      );
-    })
+    caches.keys().then((keys) => Promise.all(
+      keys.map((key) => key !== CACHE_NAME ? caches.delete(key) : undefined)
+    ))
   );
   self.clients.claim();
 });
 
-// Serve assets from cache first, falling back to network fetch
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
+    caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
+      if (response.ok) {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
       }
-      return fetch(event.request).then((networkResponse) => {
-        // Cache newly loaded dynamic assets on the fly
-        if (event.request.method === 'GET' && networkResponse.status === 200) {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        }
-        return networkResponse;
-      });
-    })
+      return response;
+    }))
   );
 });

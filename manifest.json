@@ -9,12 +9,12 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "assets/b.png",
+      "src": "b.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "assets/b.png",
+      "src": "b.png",
       "sizes": "512x512",
       "type": "image/png"
     }

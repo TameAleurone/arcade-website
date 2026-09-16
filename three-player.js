@@ -17,7 +17,7 @@
     const team = piece[0], type = piece[1].toLowerCase();
     // Team 0 uses the light (gold) piece set, team 1 uses the dark (bronze) set,
     // team 2 reuses the light set with a hue-shifted CSS filter for a distinct third color.
-    return (team==='1') ? `../assets/d_${type}.png` : `../assets/${type}.png`;
+    return (team==='1') ? `d_${type}.png` : `${type}.png`;
   }
 
   let container, canvas, ctx, allCells, cellPixel = {}, minX,minY,maxX,maxY;

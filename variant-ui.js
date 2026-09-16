@@ -4,7 +4,7 @@
 function chessPieceImg(piece){
   if(!piece) return '';
   const color = piece[0], type = piece[1].toLowerCase();
-  return color==='w' ? `../assets/${type}.png` : `../assets/d_${type}.png`;
+  return color==='w' ? `${type}.png` : `d_${type}.png`;
 }
 
 function createChessVariant(variant, displayName){
