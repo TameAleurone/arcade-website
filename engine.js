@@ -1,6 +1,7 @@
 /* CHESS ENGINE (shared by all chess variants) */
 const ChessEngine = (function(){
   const PIECE_VALUE = {P:100,N:320,B:330,R:500,Q:900,K:20000};
+  const ANTI_PIECE_VALUE = {P:100,N:320,B:330,R:500,Q:900,K:20000};
   const UNICODE = {
     wP:'♙',wN:'♘',wB:'♗',wR:'♖',wQ:'♕',wK:'♔',
     bP:'♟',bN:'♞',bB:'♝',bR:'♜',bQ:'♛',bK:'♚'
@@ -307,8 +308,16 @@ const ChessEngine = (function(){
     for(let r=0;r<8;r++) for(let c=0;c<8;c++){
       const p = state.board[r][c];
       if(!p) continue;
-      const v = PIECE_VALUE[p[1]] + pstValue(p[1], r, c, p[0]);
-      score += p[0]==='w' ? v : -v;
+      const v = state.variant==='antichess' ? ANTI_PIECE_VALUE[p[1]] : PIECE_VALUE[p[1]] + pstValue(p[1], r, c, p[0]);
+      if(state.variant==='antichess') score += p[0]==='w' ? -v : v;
+      else score += p[0]==='w' ? v : -v;
+    }
+    if(state.variant==='antichess'){
+      // In Antichess, having fewer of your own pieces is the objective.
+      // A small mobility term rewards positions that create forced captures.
+      const whiteMoves = allLegalMoves(state,'w').length;
+      const blackMoves = allLegalMoves(state,'b').length;
+      score += (blackMoves-whiteMoves)*3;
     }
     return score;
   }
@@ -322,11 +331,14 @@ const ChessEngine = (function(){
     });
   }
   function minimax(state, depth, alpha, beta, maximizing){
-    const color = state.turn;
     const st = gameStatus(state);
     if(depth===0 || st.over){
-      if(st.over && state.variant!=='antichess'){
-        if(st.result && st.result.startsWith('Checkmate')) return maximizing ? -99999+depth : 99999-depth;
+      if(st.over){
+        const whiteWon = st.result && (st.result.startsWith('White wins') || st.result.includes('White wins'));
+        if(st.result && (st.result.startsWith('Checkmate') || st.result.includes('wins'))){
+          const winScore = whiteWon ? 99999 : -99999;
+          return winScore + (whiteWon === maximizing ? depth : -depth);
+        }
         return 0;
       }
       return evaluate(state);
@@ -344,58 +356,23 @@ const ChessEngine = (function(){
     }
     return best;
   }
-  function aiPickMove(state, depth){
+  function aiPickMove(state, depth, candidateMoves){
     const st = gameStatus(state);
     if(st.over) return null;
-    const moves = st.moves;
+    const moves = candidateMoves && candidateMoves.length ? candidateMoves : st.moves;
     const color = state.turn;
-    if(state.variant==='chess' || state.variant==='fischer_random'){
-      const maximizing = color==='w';
-      let bestVal = maximizing ? -Infinity : Infinity;
-      let bestMoves = [];
-      for(const m of orderMoves(moves)){
-        const mv = m.promotion ? {...m, promotion:'Q'} : m;
-        const clone = cloneState(state);
-        applyMoveRaw(clone, mv);
-        const val = minimax(clone, depth-1, -Infinity, Infinity, !maximizing);
-        if((maximizing && val>bestVal) || (!maximizing && val<bestVal)){ bestVal=val; bestMoves=[mv]; }
-        else if(val===bestVal) bestMoves.push(mv);
-      }
-      return bestMoves[Math.floor(Math.random()*bestMoves.length)] || moves[0];
-    }
-    // 1-ply heuristic AI for antichess / dice / drawback / spell variants —
-    // no full search, but it now actually looks at the resulting position
-    // instead of just grabbing a random capture: it values material
-    // gained, avoids leaving the moved piece hanging to an undefended
-    // recapture, and (for antichess specifically) favors positions that
-    // expose more of its own pieces, since forcing itself into more
-    // capture options is what wins that variant.
-    const oppo = color==='w'?'b':'w';
-    let bestScore = -Infinity, bestMoves = [];
+    const maximizing = color==='w';
+    let bestVal = maximizing ? -Infinity : Infinity;
+    let bestMoves = [];
     for(const m of moves){
       const mv = m.promotion ? {...m, promotion:'Q'} : m;
       const clone = cloneState(state);
       applyMoveRaw(clone, mv);
-      let score = 0;
-      if(m.capture) score += PIECE_VALUE[m.capturedPiece[1]];
-      if(isSquareAttacked(clone.board, m.tr, m.tc, oppo)){
-        const defended = isSquareAttacked(clone.board, m.tr, m.tc, color);
-        score -= defended ? PIECE_VALUE[m.piece[1]]*0.4 : PIECE_VALUE[m.piece[1]]*0.9;
-      }
-      if(state.variant==='antichess'){
-        let exposed = 0;
-        for(let r=0;r<8;r++) for(let c=0;c<8;c++){
-          const p = clone.board[r][c];
-          if(p && p[0]===color && isSquareAttacked(clone.board,r,c,oppo)) exposed++;
-        }
-        score += exposed*15;
-      }
-      score += Math.random()*({2:40,3:15,4:4}[depth] || 15); // small tiebreak so equal moves don't always play the same; lower on harder difficulties
-      if(score>bestScore){ bestScore=score; bestMoves=[mv]; }
-      else if(score===bestScore) bestMoves.push(mv);
+      const val = minimax(clone, Math.max(0, depth-1), -Infinity, Infinity, !maximizing);
+      if((maximizing && val>bestVal) || (!maximizing && val<bestVal)){ bestVal=val; bestMoves=[mv]; }
+      else if(val===bestVal) bestMoves.push(mv);
     }
-    const pick = bestMoves[Math.floor(Math.random()*bestMoves.length)] || moves[0];
-    return pick.promotion ? {...pick, promotion:'Q'} : pick;
+    return bestMoves[Math.floor(Math.random()*bestMoves.length)] || moves[0];
   }
   return {
     UNICODE, PIECE_VALUE, newState, cloneState, allLegalMoves, legalMovesForPiece,

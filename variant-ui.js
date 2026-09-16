@@ -247,17 +247,8 @@ function createChessVariant(variant, displayName){
     render();
     setTimeout(()=>{
       let move;
-      if(variant==='chess' || variant==='fischer_random'){
-        move = ChessEngine.aiPickMove(state, aiDepth);
-      } else {
-        const allowed = currentAllowedMoves().moves;
-        if(allowed.length){
-          const captures = allowed.filter(m=>m.capture);
-          const pool = captures.length ? captures : allowed;
-          move = pool[Math.floor(Math.random()*pool.length)];
-          if(move && move.promotion) move = {...move, promotion:'Q'};
-        }
-      }
+      const allowed = currentAllowedMoves().moves;
+      if(allowed.length) move = ChessEngine.aiPickMove(state, aiDepth, allowed);
       if(move){
         ChessEngine.commitMove(state, move.promotion? {...move,promotion:'Q'}:move);
         const defender = move.piece[0]==='w'?'b':'w';
