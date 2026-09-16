@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meteor Dodger — Arcade Hub</title>
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body data-game-id="dodger" data-back-href="../index.html" data-back-label="Hub">
+<div id="app" class="game-page">
+  <header>
+    <h1><a href="../index.html" style="color:inherit;text-decoration:none;">ARCADE HUB</a></h1>
+    <p>A little collection of games &mdash; click a tile to play &bull; press Esc anytime to return to Hub</p>
+  </header>
+
+  <div id="game-view">
+    <div id="game-fs-target">
+      <div id="game-header">
+        <a id="back-btn" class="btn" href="../index.html">&larr; Back to Hub</a>
+        <h2 id="game-title">Meteor Dodger</h2>
+      </div>
+      <div id="game-container"></div>
+    </div>
+  </div>
+
+  <footer>Arcade Hub &mdash; web edition.</footer>
+</div>
+
+<script src="../js/main.js"></script>
+<script src="../js/games/dodger.js"></script>
+<script>bootGame('dodger');</script>
+</body>
+</html>

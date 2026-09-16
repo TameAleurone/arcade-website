@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0b1020">
+<meta name="description" content="Arcade Hub — a collection of browser games.">
+<title>Arcade Hub</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header class="hero">
+    <div class="hero-topline">
+      <span class="status-dot"></span> BROWSER ARCADE <span class="hero-divider">•</span> NO DOWNLOADS
+    </div>
+    <div class="hero-kicker">ARCADE • PLAY • REPEAT</div>
+    <h1>ARCADE HUB</h1>
+    <p>A polished collection of quick games, classics, puzzles, and chess variants.</p>
+    <div class="hero-actions">
+      <button class="hero-btn primary" id="random-game" type="button">🎲 Random game</button>
+      <button class="hero-btn" id="theme-toggle" type="button" aria-pressed="false">☀ Light mode</button>
+    </div>
+  </header>
+
+  <main id="menu-view">
+    <section class="quick-stats" aria-label="Arcade stats">
+      <div class="stat"><span class="stat-icon">🎮</span><div><b id="total-games">0</b><small>games</small></div></div>
+      <div class="stat"><span class="stat-icon">⭐</span><div><b id="favorite-count">0</b><small>favorites</small></div></div>
+      <div class="stat"><span class="stat-icon">🕹️</span><div><b id="played-count">0</b><small>played</small></div></div>
+    </section>
+
+    <section id="recent-section" class="special-section hidden">
+      <div class="section-heading"><div><span class="section-label">Pick up where you left off</span><h2>Recently played</h2></div></div>
+      <div id="recent-grid" class="mini-grid"></div>
+    </section>
+
+    <section class="library-section">
+      <div class="arcade-toolbar" aria-label="Game filters">
+        <div class="toolbar-copy">
+          <div class="section-label">Game library</div>
+          <div class="game-count" id="game-count">Loading games…</div>
+        </div>
+        <label class="search-box">
+          <span aria-hidden="true">⌕</span>
+          <input id="game-search" type="search" placeholder="Search games…" autocomplete="off" aria-label="Search games">
+          <kbd>/</kbd>
+        </label>
+      </div>
+
+      <div class="filter-row" role="group" aria-label="Game categories">
+        <button class="filter-btn active" type="button" data-filter="all">All games</button>
+        <button class="filter-btn" type="button" data-filter="arcade">Arcade</button>
+        <button class="filter-btn" type="button" data-filter="puzzle">Puzzle</button>
+        <button class="filter-btn" type="button" data-filter="chess">Chess</button>
+        <button class="filter-btn" type="button" data-filter="multiplayer">Multiplayer</button>
+        <button class="filter-btn" type="button" data-filter="favorites">★ Favorites</button>
+      </div>
+
+      <div id="menu-grid"></div>
+      <div id="no-results" class="empty-state hidden">
+        <div class="empty-icon">🔎</div>
+        <h3>No games found</h3>
+        <p>Try a different search or clear the filters.</p>
+        <button class="btn primary" id="clear-search" type="button">Clear search</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>ARCADE HUB</span><span>•</span><span>Runs in your browser</span><span>•</span><span>Press / to search</span>
+  </footer>
+</div>
+<script src="js/main.js"></script>
+<script src="js/games/snake.js"></script>
+<script src="js/games/memory.js"></script>
+<script src="js/games/breakout.js"></script>
+<script src="js/games/minesweeper.js"></script>
+<script src="js/games/game2048.js"></script>
+<script src="js/games/reflex.js"></script>
+<script src="js/games/stats.js"></script>
+<script src="js/games/two_player_hub.js"></script>
+<script src="js/games/dodger.js"></script>
+<script src="js/games/dino.js"></script>
+<script src="js/games/flyer.js"></script>
+<script src="js/games/wheel.js"></script>
+<script src="js/games/tetris.js"></script>
+<script src="js/games/clicker.js"></script>
+<script src="js/games/idle_miner.js"></script>
+<script src="js/games/mario.js"></script>
+<script src="js/games/dwarves.js"></script>
+<script src="js/games/connectfour.js"></script>
+<script src="js/games/tictactoe.js"></script>
+<script src="js/games/pong.js"></script>
+<script src="js/chess/hub.js"></script>
+
+<script>
+const categoryMap = {
+  chess_hub: 'chess', stats_hub: 'puzzle', two_player_hub: 'multiplayer', connect_four: 'multiplayer',
+  tictactoe: 'multiplayer', pong: 'multiplayer', memory: 'puzzle', minesweeper: 'puzzle', '2048': 'puzzle',
+  tetris: 'puzzle', wheel: 'arcade', snake: 'arcade', breakout: 'arcade', dino: 'arcade', flyer: 'arcade',
+  dodger: 'arcade', mario: 'arcade', clicker: 'arcade', idle_miner: 'arcade', dwarves: 'arcade', reflex: 'arcade'
+};
+
+const grid = document.getElementById('menu-grid');
+const search = document.getElementById('game-search');
+const count = document.getElementById('game-count');
+const empty = document.getElementById('no-results');
+const recentSection = document.getElementById('recent-section');
+const recentGrid = document.getElementById('recent-grid');
+let activeFilter = 'all';
+
+function favorites(){ return Store.get('favorites', []); }
+function setFavorites(v){ Store.set('favorites', v); }
+function isFavorite(id){ return favorites().includes(id); }
+function toggleFavorite(id){
+  const next = favorites();
+  const i = next.indexOf(id);
+  if(i >= 0) next.splice(i,1); else next.unshift(id);
+  setFavorites(next.slice(0,30));
+  drawMenu(); drawRecent(); updateStats();
+}
+
+function makeTile(g, mini=false){
+  const category = categoryMap[g.id] || 'arcade';
+  const tile = document.createElement(g.ready ? 'a' : 'div');
+  tile.className = 'tile' + (g.ready ? '' : ' soon') + (mini ? ' mini-tile' : '');
+  if(g.ready) tile.href = 'games/' + g.id + '.html';
+  tile.setAttribute('aria-label', g.ready ? 'Play ' + g.name : g.name + ' coming soon');
+  const fav = isFavorite(g.id);
+  tile.innerHTML = `
+    <span class="tile-glow" aria-hidden="true"></span>
+    ${!mini ? `<button class="favorite-btn ${fav?'is-favorite':''}" type="button" aria-label="${fav?'Remove':'Add'} ${g.name} ${fav?'from':'to'} favorites" aria-pressed="${fav}">${fav?'★':'☆'}</button>` : ''}
+    <span class="badge">${g.ready ? 'PLAY' : 'SOON'}</span>
+    <span class="icon" aria-hidden="true">${g.icon}</span>
+    <span class="name">${g.name}</span>
+    ${!mini ? `<span class="category">${category}</span><span class="best">${g.ready && g.best ? g.best() : 'Coming soon'}</span><span class="tile-arrow" aria-hidden="true">→</span>` : ''}
+  `;
+  const favBtn=tile.querySelector('.favorite-btn');
+  if(favBtn) favBtn.addEventListener('click', e=>{ e.preventDefault(); e.stopPropagation(); toggleFavorite(g.id); });
+  if(g.ready) tile.addEventListener('click', ()=>{
+    const recent=Store.get('recent', []).filter(id=>id!==g.id); recent.unshift(g.id); Store.set('recent', recent.slice(0,8));
+  });
+  return tile;
+}
+
+function drawMenu(){
+  const query = search.value.trim().toLowerCase();
+  let visible = 0;
+  grid.innerHTML = '';
+  Object.values(Games).forEach(g=>{
+    if(g.hidden || !g.ready) return;
+    const category = categoryMap[g.id] || 'arcade';
+    const matchesFilter = activeFilter === 'all' || (activeFilter === 'favorites' ? isFavorite(g.id) : category === activeFilter);
+    const matchesSearch = !query || g.name.toLowerCase().includes(query);
+    if(!matchesFilter || !matchesSearch) return;
+    visible++; grid.appendChild(makeTile(g));
+  });
+  count.textContent = `${visible} game${visible===1?'':'s'} shown`;
+  empty.classList.toggle('hidden', visible !== 0);
+}
+
+function drawRecent(){
+  const ids=Store.get('recent', []);
+  const games=ids.map(id=>Games[id]).filter(g=>g && g.ready);
+  recentGrid.innerHTML='';
+  games.slice(0,4).forEach(g=>recentGrid.appendChild(makeTile(g,true)));
+  recentSection.classList.toggle('hidden', games.length===0);
+}
+
+function updateStats(){
+  document.getElementById('total-games').textContent=Object.values(Games).filter(g=>g.ready&&!g.hidden).length;
+  document.getElementById('favorite-count').textContent=favorites().filter(id=>Games[id]&&Games[id].ready).length;
+  document.getElementById('played-count').textContent=Store.get('recent',[]).filter(id=>Games[id]&&Games[id].ready).length;
+}
+
+function randomGame(){
+  const games=Object.values(Games).filter(g=>g.ready&&!g.hidden);
+  if(!games.length) return;
+  const g=games[Math.floor(Math.random()*games.length)];
+  const recent=Store.get('recent',[]).filter(id=>id!==g.id); recent.unshift(g.id); Store.set('recent',recent.slice(0,8));
+  location.href='games/'+g.id+'.html';
+}
+
+document.querySelectorAll('.filter-btn').forEach(btn=>btn.addEventListener('click',()=>{
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); activeFilter=btn.dataset.filter; drawMenu();
+}));
+search.addEventListener('input',drawMenu);
+document.getElementById('clear-search').addEventListener('click',()=>{ search.value=''; activeFilter='all'; document.querySelectorAll('.filter-btn').forEach(b=>b.classList.toggle('active',b.dataset.filter==='all')); drawMenu(); search.focus(); });
+document.getElementById('random-game').addEventListener('click',randomGame);
+
+const themeBtn=document.getElementById('theme-toggle');
+function applyTheme(){
+  const light=Store.get('theme','dark')==='light'; document.body.classList.toggle('light',light);
+  themeBtn.textContent=light?'🌙 Dark mode':'☀ Light mode'; themeBtn.setAttribute('aria-pressed',String(light));
+}
+themeBtn.addEventListener('click',()=>{ Store.set('theme',document.body.classList.contains('light')?'dark':'light'); applyTheme(); });
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='/' && document.activeElement!==search){ e.preventDefault(); search.focus(); }
+  if(e.key.toLowerCase()==='r' && document.activeElement.tagName!=='INPUT'){ randomGame(); }
+  if(e.key==='Escape' && document.activeElement===search && search.value){ search.value=''; drawMenu(); }
+});
+
+applyTheme(); drawMenu(); drawRecent(); updateStats();
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "name": "Arcade Collection",
+  "short_name": "Arcade",
+  "description": "Play classic web games and chess variants offline.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#111111",
+  "theme_color": "#000000",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "assets/b.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/b.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
