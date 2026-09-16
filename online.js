@@ -1,7 +1,7 @@
 /* ARCADE ONLINE MULTIPLAYER — PeerJS room helper. */
 (function(){
   let peer=null, conn=null, role=null;
-  const PEERJS_URL='https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+  const PEERJS_URL='https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js';
   const PEER_CONFIG={host:'0.peerjs.com',port:443,path:'/',secure:true,debug:1,config:{iceServers:[
     {urls:'stun:stun.l.google.com:19302'},
     {urls:'stun:stun1.l.google.com:19302'},
@@ -41,20 +41,25 @@
   async function join(room,{onMessage,onClose,onConnect}={}){
     await loadPeerJS(); cleanup(); role='guest';
     return new Promise((resolve,reject)=>{
+      let settled=false;
+      const fail=(msg,raw)=>{ if(settled) return; settled=true; console.error('[ArcadeOnline] join failed:', raw||msg); reject(new Error(msg)); };
       peer=new Peer(undefined,PEER_CONFIG);
       peer.on('open',()=>{
-      const c=peer.connect(room,{reliable:true});
-      wire(c,onMessage,onClose,()=>{
-        if(onConnect) onConnect();
-        resolve(true);
+        const c=peer.connect(room,{reliable:true});
+        wire(c,onMessage,
+          (closeErr)=>{ // fires on close AND on the 20s no-open timeout
+            if(!settled && closeErr) fail('Connection timed out — the network may be blocking it. Try a different network (e.g. a mobile hotspot) or double-check the room code.', closeErr);
+            else if(onClose) onClose(closeErr);
+          },
+          ()=>{ settled=true; if(onConnect) onConnect(); resolve(true); }
+        );
       });
-    });
       peer.on('error',e=>{
-        let msg='Could not connect.';
+        let msg='Could not connect. Try again in a moment.';
         if(e.type==='peer-unavailable') msg='No room found with that code — double-check it and make sure the host still has the page open.';
-        else if(e.type==='network'||e.type==='server-error'||e.type==='socket-error'||e.type==='socket-closed') msg='Could not reach the multiplayer service. Check your internet connection and try again.';
-        else if(e.type==='webrtc') msg='Your network is blocking the connection (common on some WiFi/mobile/campus networks). Try a different network or a mobile hotspot.';
-        reject(new Error(msg));
+        else if(e.type==='network'||e.type==='server-error'||e.type==='socket-error'||e.type==='socket-closed'||e.type==='disconnected') msg='Could not reach the multiplayer service. Check your internet connection and try again.';
+        else if(e.type==='webrtc'||e.type==='browser-incompatible') msg='Your network or browser is blocking the connection (common on some WiFi/mobile/campus networks). Try a different network or a mobile hotspot.';
+        fail(msg,e);
       });
     });
   }
