@@ -66,6 +66,18 @@
       }
       div.addEventListener('click', ()=>onLeftClick(r,c));
       div.addEventListener('contextmenu', (e)=>{ e.preventDefault(); onRightClick(r,c); });
+      (function(){
+        let lpTimer=null, lpFired=false;
+        div.addEventListener('touchstart', ()=>{
+          lpFired=false;
+          lpTimer=setTimeout(()=>{ lpFired=true; if(navigator.vibrate) navigator.vibrate(15); onRightClick(r,c); }, 450);
+        }, {passive:true});
+        div.addEventListener('touchmove', ()=>{ clearTimeout(lpTimer); });
+        div.addEventListener('touchend', (e)=>{
+          clearTimeout(lpTimer);
+          if(lpFired) e.preventDefault();
+        });
+      })();
       el.appendChild(div);
     }
     document.getElementById('ms-flags').innerHTML = `Flags: <b>${flags}/${mines}</b>`;
@@ -137,7 +149,7 @@
     revealedCount=0; flags=0; gameOver=false; won=false; firstClick=true;
     clearInterval(timer); seconds=0;
     document.getElementById('ms-time').innerHTML = `Time: <b>0s</b>`;
-    renderMsg('Left click to reveal, right click to flag, click a revealed number to chord. First click is always safe.');
+    renderMsg('Left click to reveal, right click (or long-press on touch) to flag, click a revealed number to chord. First click is always safe.');
     const best = Store.get('ms_best_'+difficulty, null);
     document.getElementById('ms-best').innerHTML = `Best: <b>${best===null?'-':best+'s'}</b>`;
     render();

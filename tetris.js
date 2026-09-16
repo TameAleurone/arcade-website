@@ -256,6 +256,14 @@
     document.addEventListener('keyup', keyup);
     newGame();
     animId = requestAnimationFrame(loop);
+    if(window.TouchControls){
+      TouchControls.dpad(container, {left:'ArrowLeft', right:'ArrowRight', down:'ArrowDown'});
+      TouchControls.buttons(container, [
+        {label:'⟳', key:'ArrowUp'},
+        {label:'HOLD', key:'c', className:'wide'},
+        {label:'DROP', key:' ', className:'wide'},
+      ]);
+    }
   }
   function destroy(){ cancelAnimationFrame(animId); document.removeEventListener('keydown', keydown); document.removeEventListener('keyup', keyup); }
   registerGame('tetris','Tetris','🧩', true, {init, destroy}, ()=>`Best: ${Store.get('tetris_high',0)}`);

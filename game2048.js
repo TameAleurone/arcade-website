@@ -120,6 +120,11 @@
     };
     document.addEventListener('keydown', keyHandler);
     newGame();
+    if(window.TouchControls){
+      TouchControls.swipe(document.getElementById('g2048-board'), dir2=>{
+        if(!over) move(dir2);
+      }, {preventScroll:true});
+    }
   }
   function destroy(){ document.removeEventListener('keydown', keyHandler); }
   registerGame('2048','2048','🔢', true, {init, destroy}, ()=>`Best: ${Store.get('2048_best_4',0)}`);

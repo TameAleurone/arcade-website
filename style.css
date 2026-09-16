@@ -396,3 +396,40 @@
 .room-code{display:inline-block;padding:8px 14px;border-radius:9px;border:1px dashed var(--cyan);background:rgba(91,210,255,.07);color:#fff;font-weight:800;letter-spacing:2px;user-select:all;}
 .online-status{min-height:18px;margin-top:8px;color:#8fdfff;font-size:.8rem;}
 .online-badge{display:inline-block;margin-left:6px;padding:2px 7px;border-radius:99px;border:1px solid #55ef9a;color:#55ef9a;font-size:.65rem;font-weight:800;letter-spacing:.5px;}
+
+/* ---------- TOUCH CONTROLS ---------- */
+.touch-controls{ user-select:none; -webkit-user-select:none; touch-action:none; margin:14px auto 0; display:flex; justify-content:center; }
+.touch-btn{
+  font-size:1.3rem; line-height:1; min-width:56px; min-height:56px; padding:10px;
+  border-radius:14px; border:1px solid var(--border); background:var(--panel2); color:var(--text);
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+}
+.touch-btn.touch-active, .touch-btn:active{ border-color:var(--cyan); color:var(--cyan); background:rgba(91,210,255,.12); }
+.touch-btn-label{ font-size:.62rem; letter-spacing:.5px; }
+
+.touch-dpad-wrap{ margin-top:16px; }
+.touch-dpad{
+  display:grid;
+  grid-template-columns:56px 56px 56px;
+  grid-template-rows:56px 56px 56px;
+  gap:6px;
+}
+.touch-dpad > div{ width:56px; height:56px; }
+.touch-dpad .touch-btn{ width:56px; height:56px; min-width:0; min-height:0; }
+.touch-dpad-mid{ background:transparent; }
+
+.touch-btn-row{ gap:10px; flex-wrap:wrap; }
+.touch-btn-row .touch-btn{ min-width:64px; }
+.touch-btn-row .touch-btn.wide{ min-width:100px; font-size:.95rem; }
+
+/* Hidden by default; only shown on coarse-pointer (touch) devices via JS's
+   isTouchDevice() check, but keep a CSS fallback safety net too. */
+@media (hover:hover) and (pointer:fine){
+  .touch-controls{ display:none !important; }
+}
+
+/* Kill the ~300ms tap delay and stray scroll/zoom while playing. */
+.btn, #reflex-zone, .cell, .chess-sq, .ms-cell, .g2048-board, .g2048-board *, .c4-col, .c4-cell, .mem-card{ touch-action:manipulation; }
+canvas{ touch-action:none; }
+

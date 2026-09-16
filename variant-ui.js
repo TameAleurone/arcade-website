@@ -8,9 +8,79 @@ function chessPieceImg(piece){
 }
 
 function createChessVariant(variant, displayName){
-  let container, state, selected, legalTargets, mode, aiColor, aiDepth, pendingPromotion, diceValues, diceRemaining, movesLeftThisTurn, spellMode, aiThinking, handoverPending;
+  let container, state, selected, legalTargets, mode, aiColor, aiDepth, pendingPromotion, diceValues, diceRemaining, movesLeftThisTurn, spellMode, aiThinking, handoverPending, onlineRole, myColor;
 
   function pieceSquareEl(r,c){ return container.querySelector(`[data-r="${r}"][data-c="${c}"]`); }
+
+  /* --- Online multiplayer (host is always White, guest is always Black).
+     Host holds the authoritative state: any state-changing action taken
+     locally by the host (or received as a validated request from the
+     guest) mutates `state` and is broadcast in full to the guest. The
+     guest never mutates `state` itself — its clicks are sent to the host
+     as requests, and its board is simply redrawn from whatever the host
+     last broadcast. This avoids any risk of the two sides drifting apart
+     (e.g. Dice Chess rolls, which use Math.random and must only ever run
+     on one authoritative side). */
+  function onlineStatus(text){ const e=container && container.querySelector('#chess-online-status'); if(e) e.textContent=text; }
+  function sendOnline(msg){ if(window.ArcadeOnline && ArcadeOnline.connected()) ArcadeOnline.send(msg); }
+  function fullSyncPayload(){ return {state, diceValues, diceRemaining, movesLeftThisTurn}; }
+  function applyFullSync(p){
+    mode='online';
+    state = p.state; diceValues = p.diceValues; diceRemaining = p.diceRemaining; movesLeftThisTurn = p.movesLeftThisTurn;
+    selected=null; legalTargets=[]; pendingPromotion=null; spellMode=null; aiThinking=false; handoverPending=false;
+    render();
+  }
+  function showOnlinePlay(){
+    const setupMsg = container.querySelector('#chess-setup-msg');
+    if(setupMsg) setupMsg.style.display='none';
+    container.querySelectorAll('#ai-difficulty,#mode-ai-white,#mode-ai-black,#mode-2p').forEach(b=>b.style.display='none');
+    const onlinePanel = container.querySelector('#chess-online-panel');
+    if(onlinePanel) onlinePanel.style.display='none';
+    container.querySelector('#chess-play-area').style.display='block';
+  }
+  async function onlineHost(){
+    onlineRole='host'; myColor='w';
+    container.querySelector('#chess-online-room').style.display='block';
+    onlineStatus('Creating room…');
+    try{
+      const code = await ArcadeOnline.host({
+        onConnect:()=>{ onlineStatus('Opponent connected! You are White.'); showOnlinePlay(); newGame({mode:'online'}); },
+        onMessage:onHostMessage,
+        onClose:()=>{ onlineStatus('Opponent disconnected.'); }
+      });
+      container.querySelector('#chess-room-code').textContent = code;
+      onlineStatus('Share this room code with your friend. Waiting…');
+    }catch(e){
+      onlineRole=null; onlineStatus('Could not create room. Try again.'); console.error(e);
+    }
+  }
+  async function onlineJoin(){
+    const code = container.querySelector('#chess-room-input').value.trim();
+    if(!code) return onlineStatus('Enter a room code first.');
+    onlineRole='guest'; myColor='b'; mode='online';
+    container.querySelector('#chess-online-room').style.display='block';
+    container.querySelector('#chess-room-code').textContent = code;
+    onlineStatus('Joining room…');
+    try{
+      await ArcadeOnline.join(code, {
+        onConnect:()=>{ onlineStatus('Connected! You are Black. Waiting for the host to start…'); showOnlinePlay(); },
+        onMessage:onGuestMessage,
+        onClose:()=>{ onlineStatus('Host disconnected.'); }
+      });
+    }catch(e){
+      onlineRole=null; onlineStatus('Could not join that room. Check the code.'); console.error(e);
+    }
+  }
+  function onHostMessage(m){
+    if(!m || state.turn!=='b') return; // only accept requests when it's actually the guest's turn
+    if(m.type==='requestMove') commitAndAdvance(m.move);
+    else if(m.type==='requestTeleport') doTeleport(m.fr, m.fc, m.tr, m.tc);
+    else if(m.type==='requestShield') doShield(m.r, m.c);
+  }
+  function onGuestMessage(m){
+    if(!m) return;
+    if(m.type==='state') applyFullSync(m.payload);
+  }
 
   function newGame(opts){
     state = ChessEngine.newState(variant, variant!=='antichess' && variant!=='fischer_random' && variant!=='dice_chess' && variant!=='drawback_chess');
@@ -21,6 +91,7 @@ function createChessVariant(variant, displayName){
     if(variant==='drawback_chess'){ state.drawbacks = {w:assignDrawback(), b:assignDrawback()}; }
     render();
     maybeTriggerAI();
+    if(mode==='online' && onlineRole==='host') sendOnline({type:'state', payload: fullSyncPayload()});
   }
   function rollDice(){
     const types=['P','N','B','R','Q','K'];
@@ -81,7 +152,7 @@ function createChessVariant(variant, displayName){
     if(pendingPromotion || aiThinking) return;
     const status = currentAllowedMoves();
     if(status.over) return;
-    const isHumanTurn = mode==='ai' ? state.turn!==aiColor : true;
+    const isHumanTurn = mode==='ai' ? state.turn!==aiColor : (mode==='online' ? state.turn===myColor : true);
     if(!isHumanTurn) return;
 
     if(spellMode==='teleport-select'){
@@ -123,6 +194,7 @@ function createChessVariant(variant, displayName){
     render();
   }
   function doTeleport(fr,fc,tr,tc){
+    if(mode==='online' && onlineRole==='guest'){ sendOnline({type:'requestTeleport', fr, fc, tr, tc}); return; }
     const color = state.turn;
     const clone = ChessEngine.cloneState(state);
     const piece = clone.board[fr][fc];
@@ -136,6 +208,7 @@ function createChessVariant(variant, displayName){
     afterMoveAdvance(color);
   }
   function doShield(r,c){
+    if(mode==='online' && onlineRole==='guest'){ sendOnline({type:'requestShield', r, c}); return; }
     const color = state.turn;
     if(ChessEngine.isInCheck(state, color)) return; // can't skip a forced response to check
     state.shieldUsed[color]=true;
@@ -146,6 +219,7 @@ function createChessVariant(variant, displayName){
     afterMoveAdvance(color);
   }
   function commitAndAdvance(move, promo){
+    if(mode==='online' && onlineRole==='guest'){ sendOnline({type:'requestMove', move: promo ? {...move, promotion:promo} : move}); return; }
     if(promo) move = {...move, promotion:promo};
     const moverColor = move.piece[0];
     ChessEngine.commitMove(state, move);
@@ -162,6 +236,7 @@ function createChessVariant(variant, displayName){
     }
     render();
     maybeTriggerAI();
+    if(mode==='online' && onlineRole==='host') sendOnline({type:'state', payload: fullSyncPayload()});
   }
   function maybeTriggerAI(){
     if(mode!=='ai') return;
@@ -261,10 +336,10 @@ function createChessVariant(variant, displayName){
       // screen already ensures only they're looking at that point), or to
       // a human playing an AI opponent (whose own drawback is always
       // visible to them). Everything is revealed once the game ends.
-      const humanColor = mode==='ai' ? (aiColor==='w'?'b':'w') : null;
+      const humanColor = mode==='ai' ? (aiColor==='w'?'b':'w') : (mode==='online' ? myColor : null);
       function visibleTo(color){
         if(status.over) return true;
-        if(mode==='ai') return color===humanColor;
+        if(mode==='ai' || mode==='online') return color===humanColor;
         return color===state.turn;
       }
       const wVisible = visibleTo('w'), bVisible = visibleTo('b');
@@ -288,6 +363,11 @@ function createChessVariant(variant, displayName){
         <div>${diff<0?`<b style="color:var(--yellow);">+${-diff}</b>`:''} ${iconRow(byBlack)}</div>
       `;
     }
+    const restartBtn = container.querySelector('#chess-restart');
+    if(restartBtn){
+      restartBtn.textContent = mode==='online' ? 'Rematch' : 'New Game';
+      restartBtn.disabled = mode==='online' && onlineRole==='guest';
+    }
     const promoEl = container.querySelector('.chess-promo');
     if(pendingPromotion){
       promoEl.style.display='flex';
@@ -299,7 +379,7 @@ function createChessVariant(variant, displayName){
     const spellBar = container.querySelector('.chess-spells');
     if(spellBar){
       const color = state.turn;
-      const isHumanTurn = mode==='ai' ? color!==aiColor : true;
+      const isHumanTurn = mode==='ai' ? color!==aiColor : (mode==='online' ? color===myColor : true);
       const inCheck = ChessEngine.isInCheck(state, color);
       spellBar.innerHTML = `
         <button class="btn" id="spell-teleport" ${(!isHumanTurn||state.teleportUsed[color])?'disabled':''}>🌀 Teleport (${state.teleportUsed[color]?'used':'ready'})</button>
@@ -322,6 +402,20 @@ function createChessVariant(variant, displayName){
     container = c;
     container.innerHTML = `
       <div class="msg" id="chess-setup-msg">Choose how to play:</div>
+      <div class="online-panel" id="chess-online-panel">
+        <h3>Play Online <span class="online-badge">ONLINE</span></h3>
+        <p>One player hosts a room (plays White) and the other joins from any device (plays Black).</p>
+        <div class="online-row">
+          <button class="btn primary" id="chess-online-host">Create Room</button>
+          <input class="online-input" id="chess-room-input" maxlength="20" placeholder="Room code">
+          <button class="btn" id="chess-online-join">Join Room</button>
+        </div>
+        <div class="online-status" id="chess-online-status"></div>
+      </div>
+      <div class="online-panel" id="chess-online-room" style="display:none">
+        <h3>Online Room</h3>
+        <p>Room code: <span class="room-code" id="chess-room-code">—</span></p>
+      </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;margin-bottom:6px;">
         <select id="ai-difficulty" class="btn">
           <option value="2">Easy AI</option>
@@ -362,19 +456,31 @@ function createChessVariant(variant, displayName){
     container.querySelector('#mode-ai-white').addEventListener('click', ()=> start('ai','b'));
     container.querySelector('#mode-ai-black').addEventListener('click', ()=> start('ai','w'));
     container.querySelector('#mode-2p').addEventListener('click', ()=> start('2p',null));
+    container.querySelector('#chess-online-host').addEventListener('click', onlineHost);
+    container.querySelector('#chess-online-join').addEventListener('click', onlineJoin);
     function hideSetup(){
       container.querySelector('#chess-setup-msg').style.display='none';
       container.querySelectorAll('#ai-difficulty,#mode-ai-white,#mode-ai-black,#mode-2p').forEach(b=>b.style.display='none');
+      const onlinePanel = container.querySelector('#chess-online-panel');
+      if(onlinePanel) onlinePanel.style.display='none';
       container.querySelector('#chess-play-area').style.display='block';
     }
     container.querySelector('#chess-restart').addEventListener('click', ()=>{
+      if(mode==='online'){
+        if(onlineRole==='host') newGame({mode:'online'}); // rematch, keep the room open
+        return;
+      }
+      if(onlineRole){ ArcadeOnline.close(); onlineRole=null; myColor=null; }
       container.querySelector('#chess-setup-msg').style.display='block';
       container.querySelectorAll('#mode-ai-white,#mode-ai-black,#mode-2p').forEach(b=>b.style.display='inline-block');
       container.querySelector('#ai-difficulty').style.display='inline-block';
+      const onlinePanel = container.querySelector('#chess-online-panel');
+      if(onlinePanel) onlinePanel.style.display='block';
+      container.querySelector('#chess-online-room').style.display='none';
       container.querySelector('#chess-play-area').style.display='none';
     });
   }
-  function destroy(){}
+  function destroy(){ if(onlineRole){ ArcadeOnline.close(); onlineRole=null; myColor=null; } }
   return {init, destroy};
 }
 

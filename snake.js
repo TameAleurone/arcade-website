@@ -272,6 +272,13 @@
     lastTs=null;
     resetState();
     animId = requestAnimationFrame(loop);
+    if(window.TouchControls){
+      TouchControls.swipe(canvas, dir2=>{
+        const map={up:'ArrowUp',down:'ArrowDown',left:'ArrowLeft',right:'ArrowRight'};
+        TouchControls.fireKey('keydown', map[dir2]);
+      }, {preventScroll:true});
+      TouchControls.dpad(container, {up:'ArrowUp',down:'ArrowDown',left:'ArrowLeft',right:'ArrowRight'});
+    }
   }
   function destroy(){
     cancelAnimationFrame(animId);

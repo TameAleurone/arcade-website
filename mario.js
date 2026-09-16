@@ -325,6 +325,10 @@
     document.addEventListener('keyup', keyup);
     newRun();
     animId = requestAnimationFrame(loop);
+    if(window.TouchControls){
+      TouchControls.dpad(container, {left:'ArrowLeft', right:'ArrowRight'});
+      TouchControls.buttons(container, [{label:'JUMP', key:' ', hold:true, className:'wide'}]);
+    }
   }
   function destroy(){
     cancelAnimationFrame(animId);

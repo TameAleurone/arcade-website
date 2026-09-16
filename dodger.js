@@ -219,6 +219,9 @@
     document.addEventListener('keyup', keyup);
     initState();
     animId = requestAnimationFrame(loop);
+    if(window.TouchControls){
+      TouchControls.dpad(container, {up:'ArrowUp', down:'ArrowDown', left:'ArrowLeft', right:'ArrowRight'});
+    }
   }
   function destroy(){
     cancelAnimationFrame(animId);

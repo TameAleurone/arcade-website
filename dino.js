@@ -221,11 +221,15 @@
     `;
     canvas=document.getElementById('dino-canvas'); ctx=canvas.getContext('2d');
     canvas.addEventListener('mousedown', ()=>{ if(gameOver) initState(); else jump(); });
+    canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); if(gameOver) initState(); else jump(); }, {passive:false});
     document.getElementById('dino-restart').addEventListener('click', initState);
     document.addEventListener('keydown', keydown);
     document.addEventListener('keyup', keyup);
     initState();
     animId = requestAnimationFrame(loop);
+    if(window.TouchControls){
+      TouchControls.buttons(container, [{label:'DUCK', key:'ArrowDown', hold:true, className:'wide'}]);
+    }
   }
   function destroy(){
     cancelAnimationFrame(animId);

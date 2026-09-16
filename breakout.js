@@ -301,6 +301,21 @@
     document.addEventListener('keydown', keydown);
     document.addEventListener('keyup', keyup);
     canvas.addEventListener('mousemove', mousemove);
+    canvas.addEventListener('touchmove', (e)=>{
+      e.preventDefault();
+      const t=e.touches[0]; if(!t) return;
+      const rect=canvas.getBoundingClientRect();
+      const x=(t.clientX-rect.left)*(W/rect.width);
+      paddleX=Math.max(0, Math.min(W-paddleW, x-paddleW/2));
+    }, {passive:false});
+    canvas.addEventListener('touchstart', (e)=>{
+      e.preventDefault();
+      const t=e.touches[0]; if(!t) return;
+      const rect=canvas.getBoundingClientRect();
+      const x=(t.clientX-rect.left)*(W/rect.width);
+      paddleX=Math.max(0, Math.min(W-paddleW, x-paddleW/2));
+      balls.forEach(b=>{ if(b.stuck) launchBall(b, (Math.random()*40-20)); });
+    }, {passive:false});
     initState();
     animId = requestAnimationFrame(loop);
   }
