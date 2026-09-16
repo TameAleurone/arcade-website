@@ -32,7 +32,13 @@
     await loadPeerJS(); cleanup(); role='guest';
     return new Promise((resolve,reject)=>{
       peer=new Peer(undefined,PEER_CONFIG);
-      peer.on('open',()=>{ const c=peer.connect(room,{reliable:true}); wire(c,onMessage,onClose,onConnect); resolve(true); });
+      peer.on('open',()=>{
+      const c=peer.connect(room,{reliable:true});
+      wire(c,onMessage,onClose,()=>{
+        if(onConnect) onConnect();
+        resolve(true);
+      });
+    });
       peer.on('error',reject);
     });
   }
