@@ -9,3 +9,7 @@ This version is flattened and ready for the current GitHub repository layout.
 4. In GitHub: Settings -> Pages -> Deploy from a branch -> `main` -> `/ (root)`.
 
 All game HTML, JavaScript, CSS, chess assets, and service-worker paths have been updated for this root layout.
+
+
+## Online multiplayer
+Tic Tac Toe, Connect Four, and Pong use PeerJS/WebRTC. For reliable internet play, use HTTPS (GitHub Pages) and allow WebRTC in the browser. The room code is the full code shown by Create Room.
