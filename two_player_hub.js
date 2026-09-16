@@ -2,7 +2,7 @@
 (function(){
   function init(c){
     c.innerHTML = `
-      <p class="msg">Two-player hotseat games:</p>
+      <p class="msg">Play locally or online with a friend:</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
         <a class="btn primary" href="tictactoe.html">Tic Tac Toe</a>
         <a class="btn primary" href="connect_four.html">Connect Four</a>

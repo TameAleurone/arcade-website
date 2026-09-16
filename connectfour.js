@@ -1,67 +1,19 @@
-/* CONNECT FOUR (2-player hotseat) */
+/* CONNECT FOUR — hotseat + online multiplayer */
 (function(){
-  let container, board, turn, over, ROWS=6, COLS=7;
-  function newGame(){
-    board = Array.from({length:ROWS},()=>Array(COLS).fill(null));
-    turn=1; over=false;
-    document.getElementById('c4-msg').textContent = `Player 1's turn (red)`;
-    render();
-  }
-  function drop(col){
-    if(over) return;
-    let row=-1;
-    for(let r=ROWS-1;r>=0;r--){ if(!board[r][col]){ row=r; break; } }
-    if(row===-1) return;
-    board[row][col]=turn;
-    if(checkWin(row,col)){
-      over=true;
-      document.getElementById('c4-msg').textContent = `Player ${turn} wins!`;
-    } else if(board.every(r=>r.every(v=>v))){
-      over=true;
-      document.getElementById('c4-msg').textContent = `It's a draw!`;
-    } else {
-      turn = turn===1?2:1;
-      document.getElementById('c4-msg').textContent = `Player ${turn}'s turn (${turn===1?'red':'yellow'})`;
-    }
-    render();
-  }
-  function checkWin(r,c){
-    const dirs = [[0,1],[1,0],[1,1],[1,-1]];
-    const val = board[r][c];
-    for(const [dr,dc] of dirs){
-      let count=1;
-      for(let s=1;s<4;s++){ const nr=r+dr*s, nc=c+dc*s; if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&board[nr][nc]===val) count++; else break; }
-      for(let s=1;s<4;s++){ const nr=r-dr*s, nc=c-dc*s; if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&board[nr][nc]===val) count++; else break; }
-      if(count>=4) return true;
-    }
-    return false;
-  }
-  function render(){
-    const el = document.getElementById('c4-board');
-    el.innerHTML='';
-    for(let c=0;c<COLS;c++){
-      const colDiv = document.createElement('div');
-      colDiv.className='c4-col';
-      colDiv.addEventListener('click', ()=>drop(c));
-      for(let r=0;r<ROWS;r++){
-        const cell = document.createElement('div');
-        cell.className='c4-cell' + (board[r][c]===1?' p1':board[r][c]===2?' p2':'');
-        colDiv.appendChild(cell);
-      }
-      el.appendChild(colDiv);
-    }
-  }
-  function init(c){
-    container=c;
-    container.innerHTML = `
-      <div class="msg" id="c4-msg"></div>
-      <div class="c4-board" id="c4-board"></div>
-      <div class="controls-hint">2-player hotseat &mdash; click a column to drop your piece</div>
-      <button class="btn" id="c4-new">New Game</button>
-    `;
-    document.getElementById('c4-new').addEventListener('click', newGame);
-    newGame();
-  }
-  function destroy(){}
-  registerGame('connect_four','Connect Four','🔴', true, {init, destroy});
+  let container,board,turn,over,online=null,myPlayer=null;const ROWS=6,COLS=7;
+  function state(){return {board:board.map(r=>[...r]),turn,over};}
+  function status(t){const e=document.getElementById('c4-online-status');if(e)e.textContent=t;}
+  function checkWin(r,c){const dirs=[[0,1],[1,0],[1,1],[1,-1]],v=board[r][c];for(const[dr,dc]of dirs){let n=1;for(let s=1;s<4;s++){let nr=r+dr,nc=c+dc;if(nr<0||nr>=ROWS||nc<0||nc>=COLS||board[nr][nc]!==v)break;n++;}for(let s=1;s<4;s++){let nr=r-dr,nc=c-dc;if(nr<0||nr>=ROWS||nc<0||nc>=COLS||board[nr][nc]!==v)break;n++;}if(n>=4)return true;}return false;}
+  function render(){const el=document.getElementById('c4-board');if(!el)return;el.innerHTML='';for(let c=0;c<COLS;c++){const col=document.createElement('div');col.className='c4-col';col.onclick=()=>drop(c);for(let r=0;r<ROWS;r++){const cell=document.createElement('div');cell.className='c4-cell'+(board[r][c]===1?' p1':board[r][c]===2?' p2':'');col.appendChild(cell);}el.appendChild(col);}const msg=document.getElementById('c4-msg');if(msg)msg.textContent=over?(over==='draw'?"It's a draw!":`Player ${over} wins!`):`Player ${turn}'s turn${online?' — online':''}`;const nb=document.getElementById('c4-new');if(nb)nb.disabled=!!online&&!ArcadeOnline.isHost();}
+  function drop(c){if(over)return;let row=-1;for(let r=ROWS-1;r>=0;r--)if(!board[r][c]){row=r;break;}if(row<0)return;if(online){if(turn!==myPlayer)return;if(ArcadeOnline.isGuest()){ArcadeOnline.send({type:'move',c});return;}if(doDrop(c))ArcadeOnline.send({type:'state',state:state()});return;}doDrop(c);}
+  function doDrop(c){let row=-1;for(let r=ROWS-1;r>=0;r--)if(!board[r][c]){row=r;break;}if(row<0)return false;board[row][c]=turn;if(checkWin(row,c))over=turn;else if(board.every(r=>r.every(Boolean)))over='draw';else turn=turn===1?2:1;render();return true;}
+  function setState(s){board=s.board.map(r=>[...r]);turn=s.turn;over=s.over;render();}
+  function newGame(){board=Array.from({length:ROWS},()=>Array(COLS).fill(null));turn=1;over=false;render();if(online&&ArcadeOnline.isHost())ArcadeOnline.send({type:'state',state:state()});}
+  function disconnect(){if(online)ArcadeOnline.close();online=null;myPlayer=null;status('Online room closed.');document.getElementById('c4-setup').style.display='block';document.getElementById('c4-online-game').style.display='none';render();}
+  function showOnline(){document.getElementById('c4-setup').style.display='none';document.getElementById('c4-online-game').style.display='block';}
+  async function host(){showOnline();myPlayer=1;status('Creating room…');try{const code=await ArcadeOnline.host({onConnect:()=>{status('Opponent connected! You are Player 1.');newGame();},onMessage:m=>{if(m.type==='move'&&ArcadeOnline.isHost()){if(turn===2&&doDrop(m.c))ArcadeOnline.send({type:'state',state:state()});}},onClose:()=>status('Opponent disconnected.')});online=true;document.getElementById('c4-room').textContent=code;status('Share this room code. Waiting for Player 2…');}catch(e){status('Could not create room.');}}
+  async function join(){const code=document.getElementById('c4-room-input').value.trim();if(!code)return status('Enter a room code first.');showOnline();myPlayer=2;status('Joining room…');try{await ArcadeOnline.join(code,{onConnect:()=>status('Connected! You are Player 2.'),onMessage:m=>{if(m.type==='state')setState(m.state);},onClose:()=>status('Host disconnected.')});online=true;}catch(e){status('Could not join that room. Check the code.');online=null;}}
+  function init(c){container=c;container.innerHTML=`<div id="c4-setup" class="online-panel"><h3>Play Connect Four online <span class="online-badge">ONLINE</span></h3><p>Share a room code with a friend to play from different devices.</p><div class="online-row"><button class="btn primary" id="c4-host">Create Room</button><input class="online-input" id="c4-room-input" maxlength="20" placeholder="Room code"><button class="btn" id="c4-join">Join Room</button></div><div class="online-status" id="c4-online-status">You can still play hotseat below.</div></div><div id="c4-online-game" class="online-panel" style="display:none"><h3>Online Room</h3><p>Room code: <span class="room-code" id="c4-room">—</span></p><button class="btn" id="c4-leave">Leave Room</button></div><div class="msg" id="c4-msg"></div><div class="c4-board" id="c4-board"></div><div class="controls-hint">Online players take turns from their own devices. Hotseat also works locally.</div><button class="btn" id="c4-new">New Game</button>`;document.getElementById('c4-host').onclick=host;document.getElementById('c4-join').onclick=join;document.getElementById('c4-leave').onclick=disconnect;document.getElementById('c4-new').onclick=newGame;newGame();}
+  function destroy(){if(online)ArcadeOnline.close();}
+  registerGame('connect_four','Connect Four','🔴',true,{init,destroy});
 })();

@@ -385,3 +385,14 @@
   .homepage .tile { min-height:125px; }
   .homepage .icon-wrap { width:44px; height:44px; margin-bottom:10px; }
 }
+
+/* ---------- ONLINE MULTIPLAYER ---------- */
+.online-panel{width:min(560px,100%);padding:16px;border:1px solid rgba(91,210,255,.22);border-radius:14px;background:linear-gradient(145deg,rgba(91,210,255,.06),rgba(155,124,255,.05));margin-bottom:14px;text-align:center;}
+.online-panel h3{margin:0 0 6px;color:var(--cyan);font-size:1rem;}
+.online-panel p{margin:5px 0 10px;color:var(--dim);font-size:.82rem;}
+.online-row{display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;}
+.online-input{width:190px;padding:9px 11px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font:inherit;text-align:center;outline:none;}
+.online-input:focus{border-color:var(--cyan);}
+.room-code{display:inline-block;padding:8px 14px;border-radius:9px;border:1px dashed var(--cyan);background:rgba(91,210,255,.07);color:#fff;font-weight:800;letter-spacing:2px;user-select:all;}
+.online-status{min-height:18px;margin-top:8px;color:#8fdfff;font-size:.8rem;}
+.online-badge{display:inline-block;margin-left:6px;padding:2px 7px;border-radius:99px;border:1px solid #55ef9a;color:#55ef9a;font-size:.65rem;font-weight:800;letter-spacing:.5px;}
