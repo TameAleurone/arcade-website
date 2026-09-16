@@ -51,7 +51,7 @@ function createChessVariant(variant, displayName){
       container.querySelector('#chess-room-code').textContent = code;
       onlineStatus('Share this room code with your friend. Waiting…');
     }catch(e){
-      onlineRole=null; onlineStatus('Could not create room. Try again.'); console.error(e);
+      onlineRole=null; onlineStatus(e && e.message ? e.message : 'Could not create room. Try again.'); console.error(e);
     }
   }
   async function onlineJoin(){

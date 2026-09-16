@@ -19,6 +19,12 @@
       const s=document.createElement('script'); s.src=PEERJS_URL; s.onload=resolve; s.onerror=()=>reject(new Error('Could not load the online multiplayer service.')); document.head.appendChild(s);
     });
   }
+  function describeError(e){
+    if(e && e.type==='peer-unavailable') return 'No room found with that code — double-check it and make sure the host still has the page open.';
+    if(e && (e.type==='network'||e.type==='server-error'||e.type==='socket-error'||e.type==='socket-closed'||e.type==='disconnected')) return 'Could not reach the multiplayer service. Check your internet connection and try again.';
+    if(e && (e.type==='webrtc'||e.type==='browser-incompatible')) return 'Your network or browser is blocking the connection (common on some WiFi/mobile/campus networks). Try a different network or a mobile hotspot.';
+    return 'Could not connect. Try again in a moment.';
+  }
   function cleanup(){ try{if(conn)conn.close();}catch(e){} try{if(peer)peer.destroy();}catch(e){} conn=null; peer=null; role=null; }
   function wire(c,onMessage,onClose,onConnect){
     conn=c;
@@ -35,7 +41,11 @@
       peer=new Peer(id,PEER_CONFIG);
       peer.on('open',room=>resolve(room));
       peer.on('connection',c=>wire(c,onMessage,onClose,onConnect));
-      peer.on('error',e=>{ if(e.type==='unavailable-id'){ cleanup(); host({onMessage,onClose,onConnect}).then(resolve).catch(reject); } else reject(e); });
+      peer.on('error',e=>{
+        if(e.type==='unavailable-id'){ cleanup(); host({onMessage,onClose,onConnect}).then(resolve).catch(reject); return; }
+        console.error('[ArcadeOnline] host failed:', e);
+        reject(new Error(describeError(e)));
+      });
     });
   }
   async function join(room,{onMessage,onClose,onConnect}={}){
@@ -54,13 +64,7 @@
           ()=>{ settled=true; if(onConnect) onConnect(); resolve(true); }
         );
       });
-      peer.on('error',e=>{
-        let msg='Could not connect. Try again in a moment.';
-        if(e.type==='peer-unavailable') msg='No room found with that code — double-check it and make sure the host still has the page open.';
-        else if(e.type==='network'||e.type==='server-error'||e.type==='socket-error'||e.type==='socket-closed'||e.type==='disconnected') msg='Could not reach the multiplayer service. Check your internet connection and try again.';
-        else if(e.type==='webrtc'||e.type==='browser-incompatible') msg='Your network or browser is blocking the connection (common on some WiFi/mobile/campus networks). Try a different network or a mobile hotspot.';
-        fail(msg,e);
-      });
+      peer.on('error',e=>fail(describeError(e),e));
     });
   }
   window.ArcadeOnline={host,join,send:d=>{if(conn&&conn.open)conn.send(d);},close:cleanup,isHost:()=>role==='host',isGuest:()=>role==='guest',connected:()=>!!(conn&&conn.open)};

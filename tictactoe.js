@@ -48,7 +48,7 @@
       status('Share this room code with your friend. Waiting…');
     }catch(e){
       online=null;
-      status('Could not create room. Try again.');
+      status(e && e.message ? e.message : 'Could not create room. Try again.');
       console.error(e);
     }
   }
