@@ -72,5 +72,34 @@
     }
   }
   function destroy(){if(online)ArcadeOnline.close();}
+  function init(c){
+    container=c;
+    container.innerHTML = `
+      <div id="ttt-setup" class="online-panel">
+        <h3>Play online <span class="online-badge">ONLINE</span></h3>
+        <p>One player hosts a room (plays X) and the other joins from any device (plays O).</p>
+        <div class="online-row">
+          <button class="btn primary" id="ttt-host">Create Room</button>
+          <input class="online-input" id="ttt-room-input" maxlength="20" placeholder="Room code">
+          <button class="btn" id="ttt-join">Join Room</button>
+        </div>
+        <div class="online-status" id="ttt-online-status">You can still play hotseat below.</div>
+      </div>
+      <div id="ttt-online-game" class="online-panel" style="display:none">
+        <h3>Online Room</h3>
+        <p>Room code: <span class="room-code" id="ttt-room">—</span></p>
+        <button class="btn" id="ttt-leave">Leave Room</button>
+      </div>
+      <div class="msg" id="ttt-msg"></div>
+      <div class="grid-3" id="ttt-grid"></div>
+      <div class="controls-hint">Online players take turns from their own devices. Hotseat also works locally.</div>
+      <button class="btn" id="ttt-new">New Game</button>
+    `;
+    document.getElementById('ttt-host').onclick = host;
+    document.getElementById('ttt-join').onclick = join;
+    document.getElementById('ttt-leave').onclick = disconnect;
+    document.getElementById('ttt-new').onclick = newGame;
+    newGame();
+  }
   registerGame('tictactoe','Tic Tac Toe','⭕',true,{init,destroy});
 })();
