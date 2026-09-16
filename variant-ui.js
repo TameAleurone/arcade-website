@@ -68,7 +68,7 @@ function createChessVariant(variant, displayName){
         onClose:()=>{ onlineStatus('Host disconnected.'); }
       });
     }catch(e){
-      onlineRole=null; onlineStatus('Could not join that room. Check the code.'); console.error(e);
+      onlineRole=null; onlineStatus(e && e.message ? e.message : 'Could not join that room. Check the code.'); console.error(e);
     }
   }
   function onHostMessage(m){

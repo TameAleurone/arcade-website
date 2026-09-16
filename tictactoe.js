@@ -67,7 +67,7 @@
       });
     }catch(e){
       online=null;
-      status('Could not join that room. Check the code.');
+      status(e && e.message ? e.message : 'Could not join that room. Check the code.');
       console.error(e);
     }
   }
