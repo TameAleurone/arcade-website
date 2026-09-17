@@ -7,7 +7,7 @@
   function checkWinner(){for(const [a,b,c] of LINES)if(board[a]&&board[a]===board[b]&&board[a]===board[c])return board[a];if(board.every(Boolean))return 'draw';return null;}
   function render(){
     const grid=document.getElementById('ttt-grid'); if(!grid)return; grid.innerHTML='';
-    board.forEach((v,i)=>{const cell=document.createElement('div');cell.className='cell';cell.textContent=v||'';cell.style.color=v==='X'?'#50c8ff':'#ff5050';cell.addEventListener('click',()=>play(i));grid.appendChild(cell);});
+    board.forEach((v,i)=>{const cell=document.createElement('button');cell.type='button';cell.className='cell';cell.textContent=v||'';cell.setAttribute('aria-label', v ? `Square ${i+1}: ${v}` : `Empty square ${i+1}`);cell.style.color=v==='X'?'#50c8ff':'#ff5050';cell.addEventListener('click',()=>play(i));grid.appendChild(cell);});
     const msg=document.getElementById('ttt-msg'); if(msg) msg.textContent=over?(checkWinner()==='draw'?"It's a draw!":`${checkWinner()} wins!`):`${turn}'s turn${online?' — online':''}`;
     const nb=document.getElementById('ttt-new'); if(nb) nb.disabled=!!online&&!ArcadeOnline.isHost();
   }

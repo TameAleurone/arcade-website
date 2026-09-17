@@ -1,6 +1,7 @@
 /* 2048 */
 (function(){
   let board, score, best, over, won, container, keyHandler, size=4, undoState, undoAvailable, undoFlashTimer;
+  let undoHistory=[]; let movesCount=0; let bestTile=0;
   const GRID_SIZES = {'4x4':4, '5x5':5, '6x6':6};
 
   function emptyBoard(n){ return Array.from({length:n},()=>Array(n).fill(0)); }
@@ -40,20 +41,25 @@
     let result = newB;
     for(let i=0;i<(4-rotations)%4;i++) result = rotateBoard(result);
     if(moved){
-      undoState = {board: board.map(r=>r.slice()), score: scoreBefore};
+      undoHistory.push({board: board.map(r=>r.slice()), score: scoreBefore, won});
+      if(undoHistory.length>5) undoHistory.shift();
+      undoState = undoHistory[undoHistory.length-1];
       undoAvailable = true;
       board = result;
       addRandom();
       if(score>best){ best=score; Store.set('2048_best_'+size, best); }
       if(!canMove()) over=true;
     }
+    if(moved) movesCount++;
     render();
   }
   function undo(){
-    if(!undoAvailable) return;
-    board = undoState.board; score = undoState.score; over=false;
-    undoAvailable = false;
-    clearTimeout(undoFlashTimer);
+    if(!undoHistory.length) return;
+    const st=undoHistory.pop();
+    board=st.board.map(r=>r.slice()); score=st.score; won=st.won; over=false;
+    undoState=undoHistory.length?undoHistory[undoHistory.length-1]:null;
+    undoAvailable=undoHistory.length>0;
+    movesCount=Math.max(0,movesCount-1);
     render();
   }
   function canMove(){
@@ -78,18 +84,19 @@
       tile.style.background = colors[v] || '#50ffea';
       tile.style.color = v<=4 ? '#cfd3ee' : '#111';
       tile.style.fontSize = size>4 ? '1rem' : '1.4rem';
-      tile.textContent = v===0?'':v;
+      tile.textContent = v===0?'':v; if(v>bestTile) bestTile=v;
       el.appendChild(tile);
     }
     document.getElementById('g2048-score').innerHTML = `Score: <b>${score}</b>`;
     document.getElementById('g2048-best').innerHTML = `Best: <b>${best}</b>`;
+    const stat=document.getElementById('g2048-stats'); if(stat) stat.textContent=`Moves: ${movesCount} • Best tile: ${bestTile}`;
     const msg = document.getElementById('g2048-msg');
     msg.textContent = over ? 'Game Over — no more moves' : (won ? 'You made 2048! Keep going for a higher score.' : '');
     const undoBtn = document.getElementById('g2048-undo');
     if(undoBtn) undoBtn.disabled = !undoAvailable;
   }
   function newGame(){
-    board = emptyBoard(size); score=0; over=false; won=false; undoAvailable=false; undoState=null;
+    board = emptyBoard(size); score=0; over=false; won=false; undoAvailable=false; undoState=null; undoHistory=[]; movesCount=0; bestTile=0;
     best = Store.get('2048_best_'+size, 0);
     addRandom(); addRandom();
     render();
@@ -104,18 +111,19 @@
         <button class="btn" id="g2048-undo">↩ Undo</button>
         <button class="btn" id="g2048-new">New Game</button>
       </div>
-      <div class="hud"><div id="g2048-score">Score: <b>0</b></div><div id="g2048-best">Best: <b>0</b></div></div>
+      <div class="hud"><div id="g2048-score">Score: <b>0</b></div><div id="g2048-best">Best: <b>0</b></div><div id="g2048-stats">Moves: 0 • Best tile: 0</div></div>
       <div class="g2048-board" id="g2048-board"></div>
       <div class="msg" id="g2048-msg"></div>
-      <div class="controls-hint">Arrow keys to slide tiles &bull; Undo reverts your last move (one step)</div>
+      <div class="controls-hint">Arrow keys to slide tiles &bull; Undo stores up to 5 previous moves</div>
     `;
     document.getElementById('g2048-size').value = Object.keys(GRID_SIZES).find(k=>GRID_SIZES[k]===size);
     document.getElementById('g2048-size').addEventListener('change', e=>{ size=GRID_SIZES[e.target.value]; newGame(); });
     document.getElementById('g2048-undo').addEventListener('click', undo);
     document.getElementById('g2048-new').addEventListener('click', newGame);
     keyHandler = function(e){
-      const map={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down'};
+      const map={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',a:'left',d:'right',w:'up',s:'down'};
       if(map[e.key] && !over){ move(map[e.key]); e.preventDefault(); }
+      else if((e.key==='r'||e.key==='R') && !e.ctrlKey && !e.metaKey){ newGame(); e.preventDefault(); }
       else if((e.key==='z'||e.key==='Z') && !e.ctrlKey && !e.metaKey){ undo(); }
     };
     document.addEventListener('keydown', keyHandler);

@@ -1,6 +1,7 @@
 /* FLAPPY BIRD (flyer) */
 (function(){
   let canvas, ctx, container, W=420, H=560, groundY=520, animId;
+  let paused=false;
   let bird, pipes, coins, powerups, score, best, gameOver, spawnTimer, coinTimer, started;
   let lifetimeCoins, runCoins, shieldT, slowT, magnetT, doubleCoinT;
   const PIPE_GAP=160, PIPE_SPEED=125, PIPE_INTERVAL=2.0;
@@ -15,11 +16,12 @@
   function initState(){
     bird = {x:90, y:H/2, r:14, vy:0};
     pipes=[]; coins=[]; powerups=[];
-    score=0; runCoins=0; gameOver=false; spawnTimer=0; coinTimer=2; started=false;
+    score=0; runCoins=0; gameOver=false; paused=false; spawnTimer=0; coinTimer=2; started=false;
     shieldT=0; slowT=0; magnetT=0; doubleCoinT=0;
     lifetimeCoins = Store.get('flyer_lifetime_coins', 0);
   }
   function flap(){
+    if(paused && started){ ctx.fillStyle='rgba(0,0,0,.58)'; ctx.fillRect(0,0,W,H); ctx.fillStyle='#50c8ff'; ctx.font='bold 24px sans-serif'; ctx.textAlign='center'; ctx.fillText('Paused',W/2,H/2); }
     if(gameOver){ initState(); return; }
     started=true;
     bird.vy=-270;
@@ -40,7 +42,7 @@
   function loop(){
     const dt=1/60;
     if(started && !gameOver) wingPhase += dt*9;
-    if(started && !gameOver){
+    if(started && !gameOver && !paused){
       const speedScale = slowT>0 ? 0.55 : 1;
       bird.vy += 850*dt;
       bird.y += bird.vy*dt;
@@ -210,7 +212,7 @@
     ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
     ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
   }
-  function key(e){ if(e.key===' '||e.key==='ArrowUp'){ flap(); e.preventDefault(); } }
+  function key(e){ if(e.key==='p'||e.key==='P'){ paused=!paused; e.preventDefault(); return; } if(e.key===' '||e.key==='ArrowUp'){ flap(); e.preventDefault(); } }
   function init(c){
     container=c; best=Store.get('flyer_high',0);
     container.innerHTML = `

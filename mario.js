@@ -91,6 +91,7 @@
   ];
 
   let levelIdx, level, camera, coins, enemies, platforms, gaps, star, starCollected;
+  let paused=false;
   let player, score, best, lives, state, starTimer, hitInvuln, levelWidth, flag, lastTs, flashText, flashTimer;
 
   function loadLevel(idx){
@@ -121,7 +122,7 @@
     hitInvuln = 0.4;
   }
   function newRun(){
-    score=0; lives=3; state='play'; starTimer=0; flashText=''; flashTimer=0;
+    score=0; lives=3; paused=false; state='play'; starTimer=0; flashText=''; flashTimer=0;
     loadLevel(0);
   }
   function loseLife(){
@@ -136,7 +137,7 @@
   }
   function showFlash(text){ flashText=text; flashTimer=1.0; }
   function update(dt){
-    if(state!=='play') return;
+    if(state!=='play' || paused) return;
     if(starTimer>0) starTimer=Math.max(0,starTimer-dt);
     if(hitInvuln>0) hitInvuln=Math.max(0,hitInvuln-dt);
     if(flashTimer>0) flashTimer=Math.max(0,flashTimer-dt);
@@ -286,6 +287,7 @@
       ctx.globalAlpha=1;
     }
 
+    if(paused && state==='play'){ ctx.fillStyle='rgba(0,0,0,.62)'; ctx.fillRect(0,0,VIEW_W,VIEW_H); ctx.fillStyle='#50c8ff'; ctx.font='bold 24px sans-serif'; ctx.textAlign='center'; ctx.fillText('Paused',VIEW_W/2,VIEW_H/2); ctx.font='14px sans-serif'; ctx.fillText('Press P or Pause to resume',VIEW_W/2,VIEW_H/2+24); }
     if(state==='dead'){
       ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.fillRect(0,0,VIEW_W,VIEW_H);
       ctx.fillStyle='#ffff50'; ctx.font='bold 22px sans-serif'; ctx.textAlign='center';
@@ -308,6 +310,7 @@
     animId = requestAnimationFrame(loop);
   }
   function keydown(e){
+    if(e.key==='p'||e.key==='P'){ paused=!paused; e.preventDefault(); return; }
     keys[e.key]=true;
     if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
   }
@@ -317,10 +320,12 @@
     container.innerHTML = `
       <canvas id="mario-canvas" width="${VIEW_W}" height="${VIEW_H}"></canvas>
       <div class="controls-hint">Arrow keys / WASD to move &bull; Space/Up to jump &bull; Shift to run &bull; stomp or star-touch enemies, collect coins, reach the flag &mdash; 3 levels</div>
+      <button class="btn" id="mario-pause">Pause</button>
       <button class="btn" id="mario-restart">Restart</button>
     `;
     canvas=document.getElementById('mario-canvas'); ctx=canvas.getContext('2d');
     document.getElementById('mario-restart').addEventListener('click', newRun);
+    document.getElementById('mario-pause').addEventListener('click', ()=>{ paused=!paused; document.getElementById('mario-pause').textContent=paused?'Resume':'Pause'; });
     document.addEventListener('keydown', keydown);
     document.addEventListener('keyup', keyup);
     newRun();

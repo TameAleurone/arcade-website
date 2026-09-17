@@ -1,8 +1,10 @@
 /* T-REX RUNNER (dino) */
 (function(){
   let canvas, ctx, container, W=600, H=260, groundY=210, animId, keys={};
+  let paused=false;
   let dino, obstacles, pickups, score, best, gameOver, speed, spawnTimer, itemTimer, elapsed;
   let shieldHits, extraLives, scoreMultTimer, slowTimer, magnetTimer, invincibleTimer, floatingTexts;
+  let jumps=0, stompStreak=0;
   const MAX_EXTRA_LIVES=3;
   const PICKUP_INFO = {
     shield:{color:'#50ffea', label:'S', dur:10},
@@ -16,12 +18,14 @@
   function initState(){
     dino = {x:60, y:groundY-40, w:32, h:40, vy:0, onGround:true, ducking:false};
     obstacles=[]; pickups=[]; floatingTexts=[];
-    score=0; gameOver=false; speed=250; spawnTimer=1; itemTimer=rand(3,6); elapsed=0;
-    shieldHits=0; extraLives=0; scoreMultTimer=0; slowTimer=0; magnetTimer=0; invincibleTimer=0;
+    score=0; gameOver=false; paused=false; speed=250; spawnTimer=1; itemTimer=rand(3,6); elapsed=0;
+    shieldHits=0; extraLives=0; scoreMultTimer=0; slowTimer=0; magnetTimer=0; invincibleTimer=0; jumps=0; stompStreak=0;
   }
   function rand(a,b){ return a+Math.random()*(b-a); }
   function jump(){
-    if(dino.onGround && !gameOver){ dino.vy=-630; dino.onGround=false; }
+    if(gameOver) return;
+    if(dino.onGround){ dino.vy=-630; dino.onGround=false; jumps=1; }
+    else if(jumps===1){ dino.vy=-500; jumps=2; }
   }
   function spawnObstacle(){
     const isBird = score>150 && Math.random()<0.3;
@@ -48,7 +52,7 @@
   let groundScrollX=0;
   function loop(){
     const dt=1/60;
-    if(!gameOver){
+    if(!gameOver && !paused){
       const timeScale = slowTimer>0 ? 0.5 : 1;
       groundScrollX = (groundScrollX + speed*dt) % 40;
       elapsed += dt*timeScale;
@@ -194,6 +198,7 @@
       ctx.fillStyle='rgba(10,15,30,0.4)'; roundRect(ctx,6,44,150,effects.length*14+8,8); ctx.fill();
       effects.forEach(([label,color])=>{ ctx.fillStyle=color; ctx.font='11px sans-serif'; ctx.fillText(label, 12, y); y+=14; });
     }
+    if(paused){ ctx.fillStyle='rgba(0,0,0,.62)'; ctx.fillRect(0,0,W,H); ctx.fillStyle='#50c8ff'; ctx.font='bold 24px sans-serif'; ctx.textAlign='center'; ctx.fillText('Paused',W/2,H/2); ctx.font='14px sans-serif'; ctx.fillText('Press P or Pause to resume',W/2,H/2+24); }
     if(gameOver){
       ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,W,H);
       ctx.textAlign='center'; ctx.fillStyle='#ffff50'; ctx.font='bold 20px sans-serif';
@@ -217,12 +222,14 @@
         <span style="color:#a050ff;">SM slow-mo</span> &bull; <span style="color:#ff50c8;">M magnet</span> &bull;
         <span style="color:#50ff50;">+1 life</span>
       </div>
+      <button class="btn" id="dino-pause">Pause</button>
       <button class="btn" id="dino-restart">Restart</button>
     `;
     canvas=document.getElementById('dino-canvas'); ctx=canvas.getContext('2d');
     canvas.addEventListener('mousedown', ()=>{ if(gameOver) initState(); else jump(); });
     canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); if(gameOver) initState(); else jump(); }, {passive:false});
     document.getElementById('dino-restart').addEventListener('click', initState);
+    document.getElementById('dino-pause').addEventListener('click', ()=>{ paused=!paused; document.getElementById('dino-pause').textContent=paused?'Resume':'Pause'; });
     document.addEventListener('keydown', keydown);
     document.addEventListener('keyup', keyup);
     initState();

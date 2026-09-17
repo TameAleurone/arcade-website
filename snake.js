@@ -5,7 +5,9 @@
   let snake, dir, nextDir, food, score, alive, animId, lastTs, moveTimer, moveInterval;
   let powerup, powerupTimer, powerupLifeLeft;
   let portals, portalSpawnTimer, portalLifeLeft, portalCooldown;
+  let paused=false;
   let slowTimer, ghostTimer, magnetTimer;
+  let foodStreak=0, combo=1, comboFlash=0;
 
   const START_INTERVAL = 140, MIN_INTERVAL = 60, SPEEDUP_PER_FOOD = 3;
   const POWERUP_SPAWN_RANGE = [6000, 12000], POWERUP_LIFESPAN = 7000;
@@ -74,7 +76,7 @@
     const cx=Math.floor(cols/2), cy=Math.floor(rows/2);
     snake = [{x:cx,y:cy},{x:cx-1,y:cy},{x:cx-2,y:cy}];
     dir = {x:1,y:0}; nextDir = {x:1,y:0};
-    score = 0; alive = true; moveInterval = START_INTERVAL; moveTimer = 0;
+    score = 0; alive = true; paused=false; moveInterval = START_INTERVAL; moveTimer = 0; foodStreak=0; combo=1; comboFlash=0;
     powerup=null; powerupTimer = rand(...POWERUP_SPAWN_RANGE);
     portals=null; portalSpawnTimer = rand(...PORTAL_SPAWN_RANGE); portalCooldown=0;
     slowTimer=0; ghostTimer=0; magnetTimer=0;
@@ -91,6 +93,7 @@
       ctx.fillStyle = (gx+gy)%2===0 ? '#0e2410' : '#0a1e0a';
       ctx.fillRect(gx*cell, gy*cell, cell, cell);
     }
+    if(comboFlash>0){ ctx.fillStyle='#ffd700'; ctx.font='bold 14px sans-serif'; ctx.textAlign='center'; ctx.fillText(`FOOD COMBO x${combo}`, cols*cell/2, 16); }
     // portals
     if(portals){
       const fading = portalLifeLeft < 2500 && Math.floor(portalLifeLeft/166)%2===0;
@@ -148,6 +151,12 @@
       ctx.beginPath(); ctx.arc(hx+ex-dir.y*4, hy+ey+dir.x*4, 1.2, 0, Math.PI*2); ctx.fill();
       ctx.beginPath(); ctx.arc(hx+ex+dir.y*4, hy+ey-dir.x*4, 1.2, 0, Math.PI*2); ctx.fill();
     }
+    if(paused && alive){
+      ctx.fillStyle='rgba(0,0,0,0.62)'; ctx.fillRect(0,0,cols*cell,rows*cell);
+      ctx.fillStyle='#50c8ff'; ctx.font='bold 22px sans-serif'; ctx.textAlign='center';
+      ctx.fillText('Paused', cols*cell/2, rows*cell/2-6);
+      ctx.font='14px sans-serif'; ctx.fillText('Press P or tap Pause to resume', cols*cell/2, rows*cell/2+18);
+    }
     if(!alive){
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.fillRect(0,0,cols*cell,rows*cell);
@@ -167,7 +176,7 @@
     }
     const dead = head.x<0||head.x>=cols||head.y<0||head.y>=rows||snake.some(s=>s.x===head.x&&s.y===head.y);
     if(dead){
-      alive=false;
+      alive=false; comboFlash=0;
       const best = Store.get('snake_high', 0);
       if(score>best) Store.set('snake_high', score);
       return;
@@ -194,7 +203,7 @@
   function loop(ts){
     if(!lastTs) lastTs=ts;
     const dt = ts-lastTs; lastTs=ts;
-    if(alive){
+    if(alive && !paused){
       if(slowTimer>0) slowTimer=Math.max(0,slowTimer-dt);
       if(ghostTimer>0) ghostTimer=Math.max(0,ghostTimer-dt);
       if(magnetTimer>0) magnetTimer=Math.max(0,magnetTimer-dt);
@@ -242,6 +251,8 @@
     }
   }
   function keyHandler(e){
+    if(e.key==='p' || e.key==='P'){ paused=!paused; e.preventDefault(); return; }
+    if(!alive && (e.key==='Enter' || e.key==='r' || e.key==='R')){ resetState(); e.preventDefault(); return; }
     const map = {ArrowUp:{x:0,y:-1},ArrowDown:{x:0,y:1},ArrowLeft:{x:-1,y:0},ArrowRight:{x:1,y:0},
                  w:{x:0,y:-1},s:{x:0,y:1},a:{x:-1,y:0},d:{x:1,y:0}};
     if(map[e.key]){
@@ -263,11 +274,13 @@
         <span style="color:#c060ff;">&lt; shrink</span> &bull; <span style="color:#fff;">G wall-wrap</span> &bull;
         <span style="color:#ff50c8;">M magnet</span> &bull; rings are teleport portals
       </div>
+      <button class="btn" id="snake-pause" type="button">Pause</button>
       <button class="btn" id="snake-restart">Restart</button>
     `;
     canvas = document.getElementById('snake-canvas');
     ctx = canvas.getContext('2d');
     document.getElementById('snake-restart').addEventListener('click', resetState);
+    document.getElementById('snake-pause').addEventListener('click', ()=>{ if(alive){ paused=!paused; document.getElementById('snake-pause').textContent=paused?'Resume':'Pause'; } });
     document.addEventListener('keydown', keyHandler);
     lastTs=null;
     resetState();

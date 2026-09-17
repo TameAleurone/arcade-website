@@ -4,6 +4,7 @@
   let grid, cur, bag, queue, holdType, holdUsed, score, best, lines, level, over, paused;
   let dropTimer, dropInterval, lockTimer, isLocking, animId, lastTs, keys={};
   let comboCount, comboFlashTimer, comboFlashText;
+  let backToBack=0, perfectClears=0;
   const SHAPES = {
     I: {blocks:[[0,1],[1,1],[2,1],[3,1]], color:'#50ffea'},
     O: {blocks:[[1,0],[2,0],[1,1],[2,1]], color:'#ffff50'},
@@ -85,8 +86,11 @@
       }
     }
     if(cleared>0){
+      const wasTetris = cleared===4;
       lines += cleared;
       score += LINE_SCORES[cleared] * level;
+      if(wasTetris){ backToBack++; if(backToBack>1) score += 200*level; } else { backToBack=0; }
+      if(grid.every(row=>row.every(cell=>cell===null))){ const bonus=1200*level; score+=bonus; perfectClears++; comboFlashText=`PERFECT CLEAR! +${bonus}`; comboFlashTimer=1400; }
       comboCount++;
       if(comboCount>0){
         const bonus = comboCount*COMBO_BONUS_PER_STEP*level;
@@ -158,6 +162,7 @@
     document.getElementById('tetris-score').innerHTML = `Score: <b>${Math.round(score)}</b>`;
     document.getElementById('tetris-lines').innerHTML = `Lines: <b>${lines}</b>`;
     document.getElementById('tetris-level').innerHTML = `Level: <b>${level}</b>`;
+    const ts=document.getElementById('tetris-streak'); if(ts) ts.textContent=`B2B: ${backToBack} • Perfect: ${perfectClears}`;
     document.getElementById('tetris-best').innerHTML = `Best: <b>${Math.round(best)}</b>`;
 
     const holdCanvas = document.getElementById('tetris-hold');
@@ -228,14 +233,14 @@
     grid = emptyGrid(); bag=[]; queue=[]; holdType=null; holdUsed=false;
     score=0; lines=0; level=1; over=false; paused=false;
     dropTimer=0; dropInterval=700; lockTimer=0; isLocking=false; lastTs=null;
-    comboCount=-1; comboFlashTimer=0; comboFlashText='';
+    comboCount=-1; comboFlashTimer=0; comboFlashText=''; backToBack=0; perfectClears=0;
     refillQueue();
     cur = spawnFromQueue();
   }
   function init(c){
     container=c; best = Store.get('tetris_high',0);
     container.innerHTML = `
-      <div class="hud"><div id="tetris-score">Score: <b>0</b></div><div id="tetris-lines">Lines: <b>0</b></div><div id="tetris-level">Level: <b>1</b></div><div id="tetris-best">Best: <b>0</b></div></div>
+      <div class="hud"><div id="tetris-score">Score: <b>0</b></div><div id="tetris-lines">Lines: <b>0</b></div><div id="tetris-streak">B2B: 0 • Perfect: 0</div><div id="tetris-level">Level: <b>1</b></div><div id="tetris-best">Best: <b>0</b></div></div>
       <div style="display:flex;gap:14px;align-items:flex-start;justify-content:center;">
         <div style="text-align:center;">
           <div style="color:var(--dim);font-size:0.75rem;margin-bottom:4px;">HOLD (C)</div>

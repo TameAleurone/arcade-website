@@ -2,7 +2,9 @@
 (function(){
   let canvas, ctx, container, W=520, H=560, animId, keys={};
   let paddleW, paddleX, lives, score, level, gameOver, balls, bricks, powerups, lasers;
+  let paused=false;
   let widenT, slowT, fireT, laserT, laserCooldown, stickyT, scoreboostT, best;
+  let brickCombo=0, comboBest=0;
   const PADDLE_H=14, PADDLE_Y_OFFSET=50, PADDLE_SPEED=480, BALL_R=7, BASE_BALL_SPEED=210;
   const MAX_BALLS=6, BALL_SPIN_FACTOR=0.65, MAX_LIVES_CAP=5;
   const ROW_COLORS=['#ff5050','#ff9f50','#ffff50','#50ff50','#50ffea'];
@@ -42,8 +44,8 @@
     ball.stuck=false;
   }
   function initState(){
-    paddleW=100; paddleX=W/2-paddleW/2; lives=3; score=0; level=1; gameOver=false;
-    widenT=0; slowT=0; fireT=0; laserT=0; laserCooldown=0; stickyT=0; scoreboostT=0;
+    paddleW=100; paddleX=W/2-paddleW/2; lives=3; score=0; level=1; gameOver=false; paused=false;
+    widenT=0; slowT=0; fireT=0; laserT=0; laserCooldown=0; stickyT=0; scoreboostT=0; brickCombo=0; comboBest=0;
     powerups=[]; lasers=[];
     buildLevel();
     balls=[resetBallOnPaddle()];
@@ -88,9 +90,11 @@
   }
   function hitBrick(br){
     br.hp--;
+    brickCombo++; comboBest=Math.max(comboBest,brickCombo);
     if(br.hp<=0){
       br.alive=false;
-      score += Math.round(br.points*(scoreboostT>0?2:1));
+      const comboBonus=Math.min(100,Math.max(0,(brickCombo-1)*5));
+      score += Math.round((br.points+comboBonus)*(scoreboostT>0?2:1));
       spawnPowerup(br.x+br.w/2, br.y+br.h/2);
     }
   }
@@ -100,7 +104,7 @@
     if(keys['ArrowRight']||keys['d']) paddleX += PADDLE_SPEED*dt;
     paddleX = Math.max(0, Math.min(W-paddleW, paddleX));
 
-    if(!gameOver){
+    if(!gameOver && !paused){
       if(widenT>0) widenT=Math.max(0,widenT-dt*1000);
       if(slowT>0) slowT=Math.max(0,slowT-dt*1000);
       if(fireT>0) fireT=Math.max(0,fireT-dt*1000);
@@ -255,6 +259,7 @@
         ctx.fillText(`${label} ${(t/1000).toFixed(1)}s`, 12, effY); effY+=14;
       });
     }
+    if(paused){ ctx.fillStyle='rgba(0,0,0,.62)'; ctx.fillRect(0,0,W,H); ctx.fillStyle='#50c8ff'; ctx.font='bold 22px sans-serif'; ctx.textAlign='center'; ctx.fillText('Paused',W/2,H/2); ctx.font='14px sans-serif'; ctx.fillText('Press P or Pause to resume',W/2,H/2+24); }
     if(gameOver){
       ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.fillRect(0,0,W,H);
       ctx.fillStyle='#ffff50'; ctx.font='bold 22px sans-serif'; ctx.textAlign='center';
@@ -272,6 +277,7 @@
   }
   function keydown(e){
     keys[e.key]=true;
+    if(e.key==='p' || e.key==='P'){ paused=!paused; e.preventDefault(); return; }
     if(e.key===' '){
       balls.forEach(b=>{ if(b.stuck) launchBall(b, (Math.random()*40-20)); });
       e.preventDefault();
@@ -294,10 +300,12 @@
         <span style="color:#a050ff;">C sticky</span> &bull; <span style="color:#ffd700;">2x score</span> &bull;
         <span style="color:#c060ff;">B bomb</span>
       </div>
+      <button class="btn" id="bo-pause">Pause</button>
       <button class="btn" id="bo-restart">Restart</button>
     `;
     canvas = document.getElementById('bo-canvas'); ctx = canvas.getContext('2d');
     document.getElementById('bo-restart').addEventListener('click', initState);
+    document.getElementById('bo-pause').addEventListener('click', ()=>{ paused=!paused; document.getElementById('bo-pause').textContent=paused?'Resume':'Pause'; });
     document.addEventListener('keydown', keydown);
     document.addEventListener('keyup', keyup);
     canvas.addEventListener('mousemove', mousemove);

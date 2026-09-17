@@ -68,6 +68,7 @@ function bootGame(id){
   }
   if(titleEl) titleEl.textContent = g.name;
   g.module.init(container);
+  window.dispatchEvent(new Event('arcadegamebooted'));
   window.addEventListener('beforeunload', ()=>{ if(g.module.destroy) g.module.destroy(); });
 }
 

@@ -433,3 +433,45 @@
 .btn, #reflex-zone, .cell, .chess-sq, .ms-cell, .g2048-board, .g2048-board *, .c4-col, .c4-cell, .mem-card{ touch-action:manipulation; }
 canvas{ touch-action:none; }
 
+
+
+/* ---------- CHESS HUB + CHESS BOARD POLISH ---------- */
+.chess-hub-intro{text-align:center;margin-bottom:14px;}
+.chess-hub-intro .msg{margin:5px 0 2px;font-size:1.2rem;}
+.chess-hub-note{margin:0;color:var(--dim);font-size:.78rem;}
+.chess-hub-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;width:100%;max-width:900px;}
+.chess-hub-grid .tile{min-height:155px;padding:18px;transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease;}
+.chess-hub-grid .tile:hover{box-shadow:0 10px 28px rgba(0,0,0,.25);}
+.chess-hub-grid .tile .name{display:block;font-size:1.08rem;}
+.chess-hub-grid .tile .best{line-height:1.45;}
+.chess-board{box-shadow:0 12px 30px rgba(0,0,0,.25);}
+@media(max-width:520px){
+  #game-container{padding:14px 8px;}
+  .chess-hub-grid{grid-template-columns:1fr;}
+  #game-header{gap:8px;flex-wrap:wrap;}
+  #game-title{width:100%;order:-1;}
+}
+
+
+/* ---------- SHARED GAME QUALITY TOOLS ---------- */
+.game-tools{width:100%;max-width:900px;margin:16px auto 0;padding-top:12px;border-top:1px solid rgba(255,255,255,.07);display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap}
+.game-tool{font-size:.78rem;padding:6px 11px;margin:0}
+.game-help{width:min(760px,100%);padding:10px 13px;border:1px solid var(--border);border-radius:9px;background:rgba(0,0,0,.18);color:var(--dim);font-size:.8rem;line-height:1.45;text-align:center}
+#game-container.focus-mode{position:fixed;inset:0;z-index:9999;overflow:auto;border-radius:0;max-width:none;margin:0;padding:28px;background:var(--bg);justify-content:flex-start}
+#game-container.focus-mode canvas{max-height:78vh;width:auto}
+@media (max-width:700px){
+  #game-container{padding:12px}
+  .game-tools{margin-top:10px}
+  .btn{min-height:42px}
+  .grid-3{grid-template-columns:repeat(3,minmax(64px,1fr));width:min(300px,100%)}
+  .grid-3 .cell{width:auto;height:auto;aspect-ratio:1;font-size:2rem}
+  .c4-board{grid-template-columns:repeat(7,minmax(34px,1fr));width:min(420px,100%);gap:4px;padding:6px}
+  .c4-cell{width:auto;height:auto;aspect-ratio:1}
+  .mem-card{width:auto;height:auto;aspect-ratio:1}
+  .g2048-board{max-width:100%;grid-auto-rows:1fr}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+.mem-card,.grid-3 .cell,.c4-col{font:inherit;}
+.c4-col{background:transparent;border:0;padding:0;color:inherit;}
+.c4-col:focus-visible,.grid-3 .cell:focus-visible,.mem-card:focus-visible{outline:3px solid var(--cyan);outline-offset:2px;}

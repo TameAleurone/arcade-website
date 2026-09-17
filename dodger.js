@@ -1,7 +1,9 @@
 /* METEOR DODGER */
 (function(){
   let canvas, ctx, container, W=480, H=560, animId, keys={};
+  let paused=false;
   let player, meteors, powerups, score, best, lives, gameOver, spawnTimer, elapsed;
+  let nearMisses=0, nearMissFlash=0;
   let shieldT, slowT, shrinkT, multiplierT, dodgeStreak, comboTier, eliteBannerT, nextEliteScore;
   const COMBO_STEP=5, MAX_COMBO_TIER=10, COMBO_BONUS_PER_TIER=0.2, ELITE_INTERVAL=500;
   const POWERUP_KINDS = ['shield','slow','life','shrink','multiplier'];
@@ -12,7 +14,7 @@
   function comboMultiplier(){ return 1 + comboTier*COMBO_BONUS_PER_TIER; }
   function initState(){
     player = {x:W/2, y:H-60, size:22, speed:320};
-    meteors=[]; powerups=[]; score=0; lives=3; gameOver=false;
+    meteors=[]; powerups=[]; score=0; lives=3; gameOver=false; paused=false; nearMisses=0; nearMissFlash=0;
     spawnTimer=0; elapsed=0; shieldT=0; slowT=0; shrinkT=0; multiplierT=0;
     dodgeStreak=0; comboTier=0; eliteBannerT=0; nextEliteScore=ELITE_INTERVAL;
     if(!stars.length){
@@ -49,7 +51,7 @@
   }
   function loop(ts){
     const dt = 1/60;
-    if(!gameOver){
+    if(!gameOver && !paused){
       elapsed += dt;
       score += Math.round(10*dt*comboMultiplier()*(multiplierT>0?2:1));
       if(shieldT>0) shieldT=Math.max(0,shieldT-dt);
@@ -77,6 +79,9 @@
       meteors = meteors.filter(m=>{
         if(m.y-m.size>H){
           if(!m.dodged){ registerDodge(); if(m.elite) score += 50; }
+        } else if(!m.dodged && m.y>player.y-45 && m.y<player.y+player.h+45){
+          const gap=Math.abs((m.x)-(player.x+player.w/2));
+          if(gap < 75 && gap > 30){ nearMisses++; score+=5; nearMissFlash=700; }
           return false;
         }
         const dx=m.x-player.x, dy=m.y-player.y;
@@ -107,6 +112,7 @@
         return true;
       });
     }
+    if(nearMissFlash>0) nearMissFlash=Math.max(0,nearMissFlash-dt*1000);
     draw();
     animId = requestAnimationFrame(loop);
   }
@@ -170,6 +176,8 @@
     ctx.fillStyle='rgba(10,15,30,0.45)'; roundRect(ctx,6,6,150,36,10); ctx.fill();
     ctx.textAlign='left'; ctx.fillStyle='#ffff50'; ctx.font='bold 15px sans-serif';
     ctx.fillText('Score: '+score, 16, 22);
+    ctx.fillText('Near misses: '+nearMisses, 16, 42);
+    if(nearMissFlash>0){ctx.textAlign='center';ctx.fillStyle='#ffd700';ctx.font='bold 18px sans-serif';ctx.fillText('NEAR MISS +5',W/2,48);ctx.textAlign='left';}
     ctx.fillStyle='#9090a8'; ctx.font='11px sans-serif';
     ctx.fillText('Best: '+best, 16, 36);
     for(let i=0;i<lives;i++){ ctx.beginPath(); ctx.arc(20+i*22,58,7,0,Math.PI*2); ctx.fillStyle='#ff5050'; ctx.fill(); }
@@ -191,6 +199,7 @@
       ctx.globalAlpha=1;
     }
 
+    if(paused){ ctx.fillStyle='rgba(0,0,0,.62)'; ctx.fillRect(0,0,W,H); ctx.fillStyle='#50c8ff'; ctx.font='bold 24px sans-serif'; ctx.textAlign='center'; ctx.fillText('Paused',W/2,H/2); ctx.font='14px sans-serif'; ctx.fillText('Press P or Pause to resume',W/2,H/2+24); }
     if(gameOver){
       ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.fillRect(0,0,W,H);
       ctx.fillStyle='#ffff50'; ctx.font='bold 24px sans-serif'; ctx.textAlign='center';
@@ -200,7 +209,7 @@
       ctx.fillText('Click Restart to play again', W/2, H/2+38);
     }
   }
-  function keydown(e){ keys[e.key]=true; }
+  function keydown(e){ if(e.key==='p'||e.key==='P'){ paused=!paused; e.preventDefault(); return; } keys[e.key]=true; }
   function keyup(e){ keys[e.key]=false; }
   function init(c){
     container=c; best=Store.get('dodger_high',0);
@@ -211,10 +220,12 @@
         <span style="color:#50ff50;">+1 life</span> &bull; <span style="color:#c060ff;">SH shrink</span> &bull;
         <span style="color:#ff9f50;">x2 score</span> &bull; watch for elite meteors every 500 points
       </div>
+      <button class="btn" id="dodger-pause">Pause</button>
       <button class="btn" id="dodger-restart">Restart</button>
     `;
     canvas=document.getElementById('dodger-canvas'); ctx=canvas.getContext('2d');
     document.getElementById('dodger-restart').addEventListener('click', initState);
+    document.getElementById('dodger-pause').addEventListener('click', ()=>{ paused=!paused; document.getElementById('dodger-pause').textContent=paused?'Resume':'Pause'; });
     document.addEventListener('keydown', keydown);
     document.addEventListener('keyup', keyup);
     initState();

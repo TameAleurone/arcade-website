@@ -96,13 +96,16 @@ const ChessEngine = (function(){
   function cloneBoard(b){ return b.map(row=>row.slice()); }
   function newState(variant, allowCastle){
     const board = variant==='fischer_random' ? fischerBoard() : initialBoard();
-    return {
+    if(allowCastle === undefined) allowCastle = variant !== 'fischer_random';
+    const state={
       board, turn:'w', variant,
       castling: allowCastle ? {wK:true,wQ:true,bK:true,bQ:true} : {wK:false,wQ:false,bK:false,bQ:false},
       ep:null,
       teleportUsed:{w:false,b:false}, shieldUsed:{w:false,b:false}, shield:{w:null,b:null},
-      history: []
+      history: [], halfmoveClock: 0, positionCounts: {}
     };
+    state.positionCounts[positionKey(state)]=1;
+    return state;
   }
   function cloneState(s){
     return {
@@ -110,7 +113,7 @@ const ChessEngine = (function(){
       castling: {...s.castling}, ep: s.ep ? {...s.ep} : null,
       teleportUsed: {...s.teleportUsed}, shieldUsed: {...s.shieldUsed},
       shield: {w: s.shield.w?{...s.shield.w}:null, b: s.shield.b?{...s.shield.b}:null},
-      history: s.history ? s.history.slice() : []
+      history: s.history ? s.history.slice() : [], halfmoveClock: s.halfmoveClock || 0, positionCounts: {...(s.positionCounts || {})}
     };
   }
   function inBounds(r,c){ return r>=0&&r<8&&c>=0&&c<8; }
@@ -223,8 +226,10 @@ const ChessEngine = (function(){
     const color = piece[0];
     let pseudo = pseudoMovesForPiece(state, r, c);
     const kingCapture = state.variant==='antichess' || state.variant==='dice_chess' || state.variant==='drawback_chess';
-    if(piece[1]==='K' && !kingCapture) addCastlingMoves(state, r, c, pseudo);
-    if(kingCapture) return pseudo; // no check constraint, no castling
+    // Chess960/Fischer Random deliberately keeps its own simplified rules and
+    // does not offer castling. Every other chess variant supports castling.
+    if(piece[1]==='K' && state.variant!=='fischer_random') addCastlingMoves(state, r, c, pseudo);
+    if(kingCapture) return pseudo; // these variants do not enforce check
     return pseudo.filter(m=>{
       const clone = cloneState(state);
       applyMoveRaw(clone, m);
@@ -247,6 +252,19 @@ const ChessEngine = (function(){
     }
     return moves;
   }
+  function positionKey(state){
+    const boardKey=state.board.map(row=>row.map(p=>p||'--').join('')).join('/');
+    const rights=['wK','wQ','bK','bQ'].filter(k=>state.castling[k]).join('')||'-';
+    const ep=state.ep ? `${state.ep.r},${state.ep.c}` : '-';
+    return `${boardKey}|${state.turn}|${rights}|${ep}`;
+  }
+  function seedPositionCounts(state){
+    if(!state.positionCounts || Object.keys(state.positionCounts).length===0){
+      state.positionCounts={[positionKey(state)]:1};
+    }
+    return state.positionCounts;
+  }
+
   // mutates state in place, no legality checks (used internally + for committing a chosen legal move)
   function applyMoveRaw(state, move){
     const board = state.board;
@@ -267,13 +285,17 @@ const ChessEngine = (function(){
       if(move.tr===(oppo==='w'?7:0) && move.tc===7) state.castling[oppo+'K']=false;
     }
     state.ep = move.isDoubleStep ? {r:(move.fr+move.tr)/2, c:move.fc} : null;
+    state.halfmoveClock = (piece[1]==='P' || move.capturedPiece) ? 0 : (state.halfmoveClock||0) + 1;
     if(!state.history) state.history = [];
+    if(!state.positionCounts) state.positionCounts = {};
     state.history.push({
       color, piece, type:piece[1], fr:move.fr, fc:move.fc, tr:move.tr, tc:move.tc,
       capture: !!move.capturedPiece, capturedPiece: move.capturedPiece||null,
       isEnPassant: !!move.isEnPassant, isCastle: move.isCastle||null, promotion: move.promotion||null
     });
     state.turn = color==='w'?'b':'w';
+    const key=positionKey(state);
+    state.positionCounts[key]=(state.positionCounts[key]||0)+1;
   }
   function commitMove(state, move){
     applyMoveRaw(state, move);
@@ -301,6 +323,9 @@ const ChessEngine = (function(){
       if(isInCheck(state,color)) return {over:true, result:`Checkmate — ${color==='w'?'Black':'White'} wins!`};
       return {over:true, result:'Stalemate — draw'};
     }
+    seedPositionCounts(state);
+    if((state.positionCounts[positionKey(state)]||0)>=3) return {over:true, result:'Threefold repetition — draw'};
+    if((state.halfmoveClock||0)>=100) return {over:true, result:'50-move rule — draw'};
     return {over:false, moves, inCheck:isInCheck(state,color)};
   }
   function evaluate(state){
@@ -356,6 +381,22 @@ const ChessEngine = (function(){
     }
     return best;
   }
+  function moveToNotation(move){
+    if(!move) return '';
+    if(move.isCastle==='K') return 'O-O';
+    if(move.isCastle==='Q') return 'O-O-O';
+    const files='abcdefgh';
+    const from=files[move.fc]+(8-move.fr);
+    const to=files[move.tc]+(8-move.tr);
+    const piece=move.piece[1];
+    const capture=move.capture?'x':'-';
+    const promo=move.promotion?'='+move.promotion:'';
+    return (piece==='P'?'':piece)+from+capture+to+promo;
+  }
+  function castlingRights(state){
+    return {wK:!!state.castling.wK,wQ:!!state.castling.wQ,bK:!!state.castling.bK,bQ:!!state.castling.bQ};
+  }
+
   function aiPickMove(state, depth, candidateMoves){
     const st = gameStatus(state);
     if(st.over) return null;
@@ -376,6 +417,6 @@ const ChessEngine = (function(){
   }
   return {
     UNICODE, PIECE_VALUE, newState, cloneState, allLegalMoves, legalMovesForPiece,
-    commitMove, gameStatus, isInCheck, aiPickMove, isSquareAttacked, findKing
+    commitMove, gameStatus, isInCheck, aiPickMove, isSquareAttacked, findKing, moveToNotation, castlingRights, positionKey
   };
 })();
