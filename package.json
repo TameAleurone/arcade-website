@@ -1,0 +1,14 @@
+{
+  "name": "arcade-hub-online",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Arcade Hub with WebSocket online multiplayer",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node server/server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
