@@ -128,3 +128,7 @@ const heartbeat=setInterval(()=>{
   }
 },30000);
 
+process.on('SIGINT',()=>{clearInterval(heartbeat);server.close(()=>process.exit(0));});
+process.on('SIGTERM',()=>{clearInterval(heartbeat);server.close(()=>process.exit(0));});
+
+server.listen(PORT,()=>console.log(`Arcade Hub running at http://localhost:${PORT}`));
