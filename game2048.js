@@ -74,8 +74,11 @@
                   128:'#ffd700',256:'#ffcc00',512:'#ffc800',1024:'#50ff9f',2048:'#50ffea'};
   function render(){
     const el = document.getElementById('g2048-board');
-    el.style.gridTemplateColumns = `repeat(${size}, ${Math.floor(320/size)}px)`;
-    el.style.gridTemplateRows = `repeat(${size}, ${Math.floor(320/size)}px)`;
+    // Column/row *count* only — the actual pixel size is handled by CSS
+    // (width:min(360px,100%) + aspect-ratio) so the board always fits the
+    // screen instead of overflowing on narrow phones.
+    el.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+    el.style.gridTemplateRows = `repeat(${size}, 1fr)`;
     el.innerHTML='';
     for(let r=0;r<size;r++)for(let c=0;c<size;c++){
       const v = board[r][c];
@@ -83,7 +86,7 @@
       tile.className='g2048-tile';
       tile.style.background = colors[v] || '#50ffea';
       tile.style.color = v<=4 ? '#cfd3ee' : '#111';
-      tile.style.fontSize = size>4 ? '1rem' : '1.4rem';
+      tile.style.fontSize = size>4 ? 'clamp(.6rem,5vw,1rem)' : 'clamp(.85rem,6.5vw,1.4rem)';
       tile.textContent = v===0?'':v; if(v>bestTile) bestTile=v;
       el.appendChild(tile);
     }
