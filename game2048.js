@@ -29,7 +29,7 @@
   function move(dir){
     let moved=false;
     let b = board;
-    let rotations = {left:0, down:1, right:2, up:3}[dir];
+    let rotations = {left:0, up:1, right:2, down:3}[dir];
     for(let i=0;i<rotations;i++) b = rotateBoard(b);
     const scoreBefore = score;
     const newB = b.map(row=>{
