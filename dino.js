@@ -56,7 +56,7 @@
       const timeScale = slowTimer>0 ? 0.5 : 1;
       groundScrollX = (groundScrollX + speed*dt) % 40;
       elapsed += dt*timeScale;
-      score += Math.round(12*dt*(scoreMultTimer>0?2:1));
+      score += Math.round(60*dt*(scoreMultTimer>0?2:1));
       speed = (250 + Math.min(200, elapsed*5)) * timeScale;
       if(shieldHits>0) shieldHits=shieldHits; // no decay, consumed on hit
       if(scoreMultTimer>0) scoreMultTimer=Math.max(0,scoreMultTimer-dt);
