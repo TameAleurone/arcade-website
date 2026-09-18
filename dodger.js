@@ -1,8 +1,8 @@
 /* METEOR DODGER */
 (function(){
-  let canvas, ctx, container, W=480, H=560, animId, keys={};
+  let canvas, ctx, container, W=480, H=560, animId, keys={}, lastTs=null;
   let paused=false;
-  let player, meteors, powerups, score, best, lives, gameOver, spawnTimer, elapsed;
+  let player, meteors, powerups, score, scoreAccum, best, lives, gameOver, spawnTimer, elapsed;
   let nearMisses=0, nearMissFlash=0;
   let shieldT, slowT, shrinkT, multiplierT, dodgeStreak, comboTier, eliteBannerT, nextEliteScore;
   const COMBO_STEP=5, MAX_COMBO_TIER=10, COMBO_BONUS_PER_TIER=0.2, ELITE_INTERVAL=500;
@@ -14,7 +14,7 @@
   function comboMultiplier(){ return 1 + comboTier*COMBO_BONUS_PER_TIER; }
   function initState(){
     player = {x:W/2, y:H-60, size:22, speed:320};
-    meteors=[]; powerups=[]; score=0; lives=3; gameOver=false; paused=false; nearMisses=0; nearMissFlash=0;
+    meteors=[]; powerups=[]; score=0; scoreAccum=0; lives=3; gameOver=false; paused=false; nearMisses=0; nearMissFlash=0;
     spawnTimer=0; elapsed=0; shieldT=0; slowT=0; shrinkT=0; multiplierT=0;
     dodgeStreak=0; comboTier=0; eliteBannerT=0; nextEliteScore=ELITE_INTERVAL;
     if(!stars.length){
@@ -50,10 +50,21 @@
     if(dodgeStreak%COMBO_STEP===0 && comboTier<MAX_COMBO_TIER) comboTier++;
   }
   function loop(ts){
-    const dt = 1/60;
+    // Real elapsed time since last frame, clamped for backgrounded-tab
+    // safety. `ts` was already being passed in but unused — the fixed
+    // 1/60 step meant meteor speed and spawn rate scaled up on any
+    // display refreshing above 60Hz (120/144Hz phones and monitors).
+    const dt = lastTs!=null ? Math.min(1/20, (ts-lastTs)/1000) : 1/60;
+    lastTs = ts;
     if(!gameOver && !paused){
       elapsed += dt;
-      score += Math.round(10*dt*comboMultiplier()*(multiplierT>0?2:1));
+      // Passive time-survived score, accumulated as a fraction and only
+      // added to the displayed score once it reaches a whole point — the
+      // previous version rounded the tiny per-frame amount straight to 0
+      // almost all the time, so in practice it did nothing and the number
+      // climbing was really coming from near-misses/elite bonuses below.
+      scoreAccum += 2*dt*comboMultiplier()*(multiplierT>0?2:1);
+      while(scoreAccum>=1){ score++; scoreAccum--; }
       if(shieldT>0) shieldT=Math.max(0,shieldT-dt);
       if(slowT>0) slowT=Math.max(0,slowT-dt);
       if(shrinkT>0) shrinkT=Math.max(0,shrinkT-dt);
@@ -78,10 +89,10 @@
       powerups.forEach(p=> p.y += p.speed*dt);
       meteors = meteors.filter(m=>{
         if(m.y-m.size>H){
-          if(!m.dodged){ registerDodge(); if(m.elite) score += 50; }
+          if(!m.dodged){ registerDodge(); if(m.elite) score += 20; }
         } else if(!m.dodged && m.y>player.y-45 && m.y<player.y+player.h+45){
           const gap=Math.abs((m.x)-(player.x+player.w/2));
-          if(gap < 75 && gap > 30){ nearMisses++; score+=5; nearMissFlash=700; }
+          if(gap < 75 && gap > 30){ nearMisses++; score+=2; nearMissFlash=700; }
           return false;
         }
         const dx=m.x-player.x, dy=m.y-player.y;

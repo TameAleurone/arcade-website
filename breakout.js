@@ -1,6 +1,6 @@
 /* BREAKOUT */
 (function(){
-  let canvas, ctx, container, W=520, H=560, animId, keys={};
+  let canvas, ctx, container, W=520, H=560, animId, keys={}, lastTs=null;
   let paddleW, paddleX, lives, score, level, gameOver, balls, bricks, powerups, lasers;
   let paused=false;
   let widenT, slowT, fireT, laserT, laserCooldown, stickyT, scoreboostT, best;
@@ -98,8 +98,13 @@
       spawnPowerup(br.x+br.w/2, br.y+br.h/2);
     }
   }
-  function loop(){
-    const dt=1/60;
+  function loop(ts){
+    // Real elapsed time since last frame, clamped so a backgrounded tab
+    // or a slow frame doesn't cause a huge physics jump on return. A
+    // fixed 1/60 step here would make the game run proportionally
+    // faster on any display refreshing above 60Hz (120/144Hz, etc).
+    const dt = lastTs!=null ? Math.min(1/20, (ts-lastTs)/1000) : 1/60;
+    lastTs = ts;
     if(keys['ArrowLeft']||keys['a']) paddleX -= PADDLE_SPEED*dt;
     if(keys['ArrowRight']||keys['d']) paddleX += PADDLE_SPEED*dt;
     paddleX = Math.max(0, Math.min(W-paddleW, paddleX));

@@ -1,6 +1,6 @@
 /* FLAPPY BIRD (flyer) */
 (function(){
-  let canvas, ctx, container, W=420, H=560, groundY=520, animId;
+  let canvas, ctx, container, W=420, H=560, groundY=520, animId, lastTs=null;
   let paused=false;
   let bird, pipes, coins, powerups, score, best, gameOver, spawnTimer, coinTimer, started;
   let lifetimeCoins, runCoins, shieldT, slowT, magnetT, doubleCoinT;
@@ -39,8 +39,12 @@
     }
   }
   let wingPhase=0;
-  function loop(){
-    const dt=1/60;
+  function loop(ts){
+    // Real elapsed time since last frame, clamped for backgrounded-tab
+    // safety, instead of assuming 60fps. Gravity/pipe speed were running
+    // proportionally faster on any display refreshing above 60Hz.
+    const dt = lastTs!=null ? Math.min(1/20, (ts-lastTs)/1000) : 1/60;
+    lastTs = ts;
     if(started && !gameOver) wingPhase += dt*9;
     if(started && !gameOver && !paused){
       const speedScale = slowT>0 ? 0.55 : 1;

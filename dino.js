@@ -1,6 +1,6 @@
 /* T-REX RUNNER (dino) */
 (function(){
-  let canvas, ctx, container, W=600, H=260, groundY=210, animId, keys={};
+  let canvas, ctx, container, W=600, H=260, groundY=210, animId, keys={}, lastTs=null;
   let paused=false;
   let dino, obstacles, pickups, score, best, gameOver, speed, spawnTimer, itemTimer, elapsed;
   let shieldHits, extraLives, scoreMultTimer, slowTimer, magnetTimer, invincibleTimer, floatingTexts;
@@ -50,8 +50,12 @@
     floatingTexts.push({x:dino.x, y:dino.y-10, text:kind==='life'?'+1 Life':info.label, life:1000});
   }
   let groundScrollX=0;
-  function loop(){
-    const dt=1/60;
+  function loop(ts){
+    // Use real frame-to-frame elapsed time instead of assuming 60fps, so
+    // speed/scoring don't run faster on 90/120/144Hz+ displays. Clamp to
+    // avoid a huge jump after the tab was backgrounded.
+    const dt = lastTs!=null ? Math.min(1/20, (ts-lastTs)/1000) : 1/60;
+    lastTs = ts;
     if(!gameOver && !paused){
       const timeScale = slowTimer>0 ? 0.5 : 1;
       groundScrollX = (groundScrollX + speed*dt) % 40;
