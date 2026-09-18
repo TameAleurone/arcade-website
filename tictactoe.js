@@ -2,7 +2,7 @@
 (function(){
   let container, board, turn, over, online=null, myMark=null;
   const LINES=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-  function status(text){const e=document.getElementById('ttt-online-status');if(e)e.textContent=text;}
+  function status(text){document.querySelectorAll('.ttt-online-status').forEach(e=>e.textContent=text);}
   function state(){return {board:[...board],turn,over};}
   function checkWinner(){for(const [a,b,c] of LINES)if(board[a]&&board[a]===board[b]&&board[a]===board[c])return board[a];if(board.every(Boolean))return 'draw';return null;}
   function render(){
@@ -42,7 +42,9 @@
             if(turn==='O'&&applyMove(m.i)) ArcadeOnline.send({type:'state',state:state()});
           }
         },
-        onClose:()=>{status('Opponent disconnected.');online=null;myMark='X';render();}
+        onClose:()=>{status('Opponent disconnected.');render();},
+        onReconnecting:()=>status('Connection dropped — reconnecting…'),
+        onReconnected:()=>status('Reconnected. Waiting for your opponent…')
       });
       document.getElementById('ttt-room').textContent=code;
       status('Share this room code with your friend. Waiting…');
@@ -63,8 +65,15 @@
       await ArcadeOnline.join(code,{
         onConnect:()=>status('Connected! You are O.'),
         onMessage:m=>{if(m.type==='state')setState(m.state);},
-        onClose:()=>{status('Host disconnected.');online=null;myMark=null;render();}
+        onClose:()=>{status('Host disconnected.');render();},
+        onReconnecting:()=>status('Connection dropped — reconnecting…'),
+        onReconnected:()=>status('Reconnected!')
       });
+      // The server only tells the HOST when a peer connects (onConnect,
+      // above) — the guest's own confirmation is this promise resolving,
+      // so update the guest's status here rather than waiting on a message
+      // that's never sent to them.
+      status('Connected! You are O.');
     }catch(e){
       online=null;
       status(e && e.message ? e.message : 'Could not join that room. Check the code.');
@@ -83,11 +92,12 @@
           <input class="online-input" id="ttt-room-input" maxlength="20" placeholder="Room code">
           <button class="btn" id="ttt-join">Join Room</button>
         </div>
-        <div class="online-status" id="ttt-online-status">You can still play hotseat below.</div>
+        <div class="online-status ttt-online-status" id="ttt-online-status">You can still play hotseat below.</div>
       </div>
       <div id="ttt-online-game" class="online-panel" style="display:none">
         <h3>Online Room</h3>
         <p>Room code: <span class="room-code" id="ttt-room">—</span></p>
+        <div class="online-status ttt-online-status"></div>
         <button class="btn" id="ttt-leave">Leave Room</button>
       </div>
       <div class="msg" id="ttt-msg"></div>

@@ -49,9 +49,22 @@
     return b;
   }
 
+  /* Controls are appended to document.body (see dpad/buttons below) so that
+     position:fixed positions them against the true viewport — #game-container
+     sits inside #game-fs-target, which has a CSS zoom applied to make the
+     game view read bigger, and that zoom cascades into descendants (even
+     fixed-position ones) in a way that throws off fixed offsets and
+     vw-based sizing. Body has no such ancestor, so plain px/vw values here
+     behave normally. Track the live nodes so a game that re-runs dpad()/
+     buttons() (pong does, when switching modes) replaces them instead of
+     stacking duplicates on top of each other. */
+  let activeDpad=null, activeButtons=null;
+
   /* dpad: {up,down,left,right} -> key names. Any can be omitted. */
   function dpad(container, keys){
     if(!isTouchDevice()) return null;
+    if(activeDpad){ activeDpad.remove(); activeDpad=null; }
+    container.classList.add('touch-controls-active');
     const wrap=document.createElement('div');
     wrap.className='touch-controls touch-dpad-wrap';
     const pad=document.createElement('div');
@@ -68,13 +81,16 @@
       pad.appendChild(btn);
     });
     wrap.appendChild(pad);
-    container.appendChild(wrap);
+    document.body.appendChild(wrap);
+    activeDpad=wrap;
     return wrap;
   }
 
   /* buttons: [{label,key,hold?:bool,className?}] rendered in a row. */
   function buttons(container, defs, extraClass){
     if(!isTouchDevice()) return null;
+    if(activeButtons){ activeButtons.remove(); activeButtons=null; }
+    container.classList.add('touch-controls-active');
     const wrap=document.createElement('div');
     wrap.className='touch-controls touch-btn-row'+(extraClass?' '+extraClass:'');
     defs.forEach(d=>{
@@ -82,7 +98,8 @@
       if(d.hold) bindHold(btn, d.key); else bindTap(btn, d.key);
       wrap.appendChild(btn);
     });
-    container.appendChild(wrap);
+    document.body.appendChild(wrap);
+    activeButtons=wrap;
     return wrap;
   }
 

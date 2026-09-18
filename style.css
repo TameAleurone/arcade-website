@@ -397,18 +397,33 @@
 .online-status{min-height:18px;margin-top:8px;color:#8fdfff;font-size:.8rem;}
 .online-badge{display:inline-block;margin-left:6px;padding:2px 7px;border-radius:99px;border:1px solid #55ef9a;color:#55ef9a;font-size:.65rem;font-weight:800;letter-spacing:.5px;}
 
-/* ---------- TOUCH CONTROLS ---------- */
-.touch-controls{ user-select:none; -webkit-user-select:none; touch-action:none; margin:14px auto 0; display:flex; justify-content:center; }
+/* ---------- TOUCH CONTROLS ----------
+   Anchored as a fixed overlay pinned to the viewport, not stacked in normal
+   document flow below the canvas. This is what actually keeps the buttons
+   reachable at the same time as the game — on a short phone screen, controls
+   appended after a tall canvas would get pushed below the fold and require
+   scrolling away from the action to reach them. Movement (dpad) sits at the
+   bottom-left, action buttons at the bottom-right — the standard split for
+   two-thumb play — and semi-transparent backgrounds keep the game visible
+   underneath. z-index is higher than #game-container.focus-mode's 9999 so
+   controls stay usable in fullscreen/focus mode too. */
+.touch-controls{
+  user-select:none; -webkit-user-select:none; touch-action:none;
+  position:fixed; bottom:calc(env(safe-area-inset-bottom,0px) + 10px);
+  z-index:10000; display:flex; gap:8px; pointer-events:none;
+}
+.touch-controls > *{ pointer-events:auto; }
 .touch-btn{
   font-size:1.3rem; line-height:1; min-width:56px; min-height:56px; padding:10px;
-  border-radius:14px; border:1px solid var(--border); background:var(--panel2); color:var(--text);
+  border-radius:14px; border:1px solid var(--border); background:rgba(32,35,58,.72);
+  backdrop-filter:blur(2px); color:var(--text);
   display:flex; align-items:center; justify-content:center; cursor:pointer;
   -webkit-tap-highlight-color:transparent;
 }
-.touch-btn.touch-active, .touch-btn:active{ border-color:var(--cyan); color:var(--cyan); background:rgba(91,210,255,.12); }
+.touch-btn.touch-active, .touch-btn:active{ border-color:var(--cyan); color:var(--cyan); background:rgba(91,210,255,.22); }
 .touch-btn-label{ font-size:.62rem; letter-spacing:.5px; }
 
-.touch-dpad-wrap{ margin-top:16px; }
+.touch-dpad-wrap{ left:calc(env(safe-area-inset-left,0px) + 10px); }
 .touch-dpad{
   display:grid;
   grid-template-columns:56px 56px 56px;
@@ -419,9 +434,14 @@
 .touch-dpad .touch-btn{ width:56px; height:56px; min-width:0; min-height:0; }
 .touch-dpad-mid{ background:transparent; }
 
-.touch-btn-row{ gap:10px; flex-wrap:wrap; }
+.touch-btn-row{ right:calc(env(safe-area-inset-right,0px) + 10px); gap:10px; flex-wrap:wrap-reverse; justify-content:flex-end; max-width:230px; }
 .touch-btn-row .touch-btn{ min-width:64px; }
 .touch-btn-row .touch-btn.wide{ min-width:100px; font-size:.95rem; }
+
+/* Leave enough clearance at the bottom of the game area so the fixed
+   controls never sit on top of the score/HUD text or a restart button. */
+#game-container.touch-controls-active{ padding-bottom:200px; }
+#game-container.touch-controls-active.focus-mode{ padding-bottom:160px; }
 
 /* Hidden by default; only shown on coarse-pointer (touch) devices via JS's
    isTouchDevice() check, but keep a CSS fallback safety net too. */

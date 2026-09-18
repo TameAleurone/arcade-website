@@ -241,12 +241,12 @@
     container=c; best = Store.get('tetris_high',0);
     container.innerHTML = `
       <div class="hud"><div id="tetris-score">Score: <b>0</b></div><div id="tetris-lines">Lines: <b>0</b></div><div id="tetris-streak">B2B: 0 • Perfect: 0</div><div id="tetris-level">Level: <b>1</b></div><div id="tetris-best">Best: <b>0</b></div></div>
-      <div style="display:flex;gap:14px;align-items:flex-start;justify-content:center;">
+      <div style="display:flex;gap:14px;align-items:flex-start;justify-content:center;flex-wrap:wrap;">
         <div style="text-align:center;">
           <div style="color:var(--dim);font-size:0.75rem;margin-bottom:4px;">HOLD (C)</div>
           <canvas id="tetris-hold" width="60" height="60" style="background:#1a1a2e;border-radius:6px;"></canvas>
         </div>
-        <canvas id="tetris-canvas" width="${cols*cell}" height="${rows*cell}"></canvas>
+        <canvas id="tetris-canvas" width="${cols*cell}" height="${rows*cell}" style="min-width:0;max-width:100%;height:auto;"></canvas>
         <div style="text-align:center;">
           <div style="color:var(--dim);font-size:0.75rem;margin-bottom:4px;">NEXT</div>
           <canvas id="tetris-next" width="60" height="140" style="background:#1a1a2e;border-radius:6px;"></canvas>

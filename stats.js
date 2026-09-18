@@ -33,7 +33,7 @@
         ${row('Minesweeper — best time (medium)', msMed===null?'—':msMed+'s')}
         ${row('Minesweeper — best time (hard)', msHard===null?'—':msHard+'s')}
         ${row('Meteor Dodger — high score', dodger)}
-        ${row('T-Rex Game — high score', dino)}
+        ${row('Dino Game — high score', dino)}
         ${row('Flappy Bird — high score', flyer)}
         ${row('Wheel of Fortune — best score', wheel)}
         ${row('Tetris — high score', Math.floor(tetris))}

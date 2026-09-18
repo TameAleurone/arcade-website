@@ -49,7 +49,9 @@ function createChessVariant(variant, displayName){
       const code = await ArcadeOnline.host({
         onConnect:()=>{ onlineStatus('Opponent connected! You are White.'); showOnlinePlay(); newGame({mode:'online'}); },
         onMessage:onHostMessage,
-        onClose:()=>{ onlineStatus('Opponent disconnected.'); }
+        onClose:()=>{ onlineStatus('Opponent disconnected.'); },
+        onReconnecting:()=>onlineStatus('Connection dropped — reconnecting…'),
+        onReconnected:()=>onlineStatus('Reconnected. Waiting for your opponent…')
       });
       container.querySelector('#chess-room-code').textContent = code;
       onlineStatus('Share this room code with your friend. Waiting…');
@@ -65,11 +67,19 @@ function createChessVariant(variant, displayName){
     container.querySelector('#chess-room-code').textContent = code;
     onlineStatus('Joining room…');
     try{
+      // The server only tells the HOST when a peer connects — it never
+      // sends that message to the guest, so this join() promise resolving
+      // is the guest's only real signal that they made it in. Putting
+      // showOnlinePlay() inside onConnect (as this used to) meant it never
+      // ran: joining as guest looked like it silently did nothing.
       await ArcadeOnline.join(code, {
-        onConnect:()=>{ onlineStatus('Connected! You are Black. Waiting for the host to start…'); showOnlinePlay(); },
         onMessage:onGuestMessage,
-        onClose:()=>{ onlineStatus('Host disconnected.'); }
+        onClose:()=>{ onlineStatus('Host disconnected.'); },
+        onReconnecting:()=>onlineStatus('Connection dropped — reconnecting…'),
+        onReconnected:()=>onlineStatus('Reconnected!')
       });
+      onlineStatus('Connected! You are Black. Waiting for the host to start…');
+      showOnlinePlay();
     }catch(e){
       onlineRole=null; onlineStatus(e && e.message ? e.message : 'Could not join that room. Check the code.'); console.error(e);
     }
