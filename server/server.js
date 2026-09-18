@@ -7,6 +7,9 @@ const { WebSocketServer } = require('ws');
 const PORT = Number(process.env.PORT || 8080);
 const ROOT = path.resolve(__dirname, '..');
 const MAX_MESSAGE = 256 * 1024;
+const MAX_ROOMS = 2000;
+const ACTION_WINDOW_MS = 10000;
+const ACTION_LIMIT = 20; // host/join attempts per window, per connection
 const rooms = new Map();
 
 function roomCode(){
@@ -16,6 +19,10 @@ function roomCode(){
     code = Array.from({length:6},()=>chars[Math.floor(Math.random()*chars.length)]).join('');
   } while(rooms.has(code));
   return code;
+}
+
+function makeToken(){
+  return crypto.randomBytes(16).toString('hex');
 }
 
 function send(ws, msg){
@@ -75,6 +82,19 @@ const wss=new WebSocketServer({server,path:'/ws',maxPayload:MAX_MESSAGE});
 
 wss.on('connection',(ws)=>{
   ws.roomCode=null; ws.role=null;
+  ws.isAlive=true;
+  ws.actionTimestamps=[];
+  ws.on('pong',()=>{ ws.isAlive=true; });
+
+  // Basic anti-abuse: cap how often one connection can try to host/join,
+  // so a client can't hammer the server creating rooms or guessing codes.
+  function rateLimited(){
+    const now=Date.now();
+    ws.actionTimestamps=ws.actionTimestamps.filter(t=>now-t<ACTION_WINDOW_MS);
+    if(ws.actionTimestamps.length>=ACTION_LIMIT) return true;
+    ws.actionTimestamps.push(now);
+    return false;
+  }
 
   ws.on('message',(raw)=>{
     if(raw.length>MAX_MESSAGE) return fail(ws,'Message too large.');
@@ -83,21 +103,45 @@ wss.on('connection',(ws)=>{
 
     if(msg.action==='host'){
       if(ws.roomCode) return fail(ws,'You are already in a room.');
+      if(rateLimited()) return fail(ws,'Too many attempts. Please slow down.');
+      if(rooms.size>=MAX_ROOMS) return fail(ws,'The server is at capacity. Please try again shortly.');
       const code=roomCode();
-      rooms.set(code,{host:ws,guest:null});
+      const token=makeToken();
+      rooms.set(code,{host:ws,guest:null,hostToken:token});
       ws.roomCode=code; ws.role='host';
-      return send(ws,{type:'hosted',room:code});
+      return send(ws,{type:'hosted',room:code,token});
     }
 
     if(msg.action==='join'){
       if(ws.roomCode) return fail(ws,'You are already in a room.');
+      if(rateLimited()) return fail(ws,'Too many attempts. Please slow down.');
       const code=String(msg.room||'').toUpperCase();
       const room=rooms.get(code);
       if(!room) return fail(ws,'Room not found. Check the code and make sure the host is still connected.');
       if(room.guest) return fail(ws,'That room is already full.');
       room.guest=ws; ws.roomCode=code; ws.role='guest';
       send(ws,{type:'joined',room:code});
-      send(room.host,{type:'peer-connected'});
+      if(room.host) send(room.host,{type:'peer-connected'});
+      return;
+    }
+
+    // Lets a host whose connection dropped (phone lost signal, laptop went
+    // to sleep, etc) get their same room back — matched by a secret token
+    // only they ever received — instead of the room being unrecoverable
+    // the instant their socket closes. The guest, if still there, keeps
+    // their seat and their view of the game the whole time.
+    if(msg.action==='reclaim'){
+      if(ws.roomCode) return fail(ws,'You are already in a room.');
+      if(rateLimited()) return fail(ws,'Too many attempts. Please slow down.');
+      const code=String(msg.room||'').toUpperCase();
+      const token=String(msg.token||'');
+      const room=rooms.get(code);
+      if(!room) return fail(ws,'That room no longer exists.');
+      if(room.host) return fail(ws,'That room already has a host connected.');
+      if(!token || room.hostToken!==token) return fail(ws,'Could not reclaim that room.');
+      room.host=ws; ws.roomCode=code; ws.role='host';
+      send(ws,{type:'hosted',room:code,token});
+      if(room.guest) send(room.guest,{type:'peer-connected'});
       return;
     }
 
@@ -124,7 +168,14 @@ wss.on('connection',(ws)=>{
 
 const heartbeat=setInterval(()=>{
   for(const ws of wss.clients){
-    if(ws.readyState===1) send(ws,{type:'ping'});
+    if(ws.readyState!==1) continue;
+    // If a connection didn't answer the previous ping, it's dead (phone
+    // lost signal, tab was killed, etc). Terminate it so its room frees up
+    // instead of sitting as a "ghost" player forever.
+    if(ws.isAlive===false){ ws.terminate(); continue; }
+    ws.isAlive=false;
+    ws.ping();
+    send(ws,{type:'ping'});
   }
 },30000);
 
