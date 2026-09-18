@@ -35,10 +35,19 @@
     if(elite){
       nextEliteScore += ELITE_INTERVAL;
       eliteBannerT = 1.6;
-      meteors.push({x: Math.random()*(W-50)+25, y:-50, size:50, speed:70+Math.min(90,score*0.15), elite:true, dodged:false, seed:Math.random()*100, rot:Math.random()*Math.PI*2, rotSpeed:(Math.random()-0.5)*1.2});
+      // Speed still ramps with score early on, but the ceiling is much
+      // lower than it used to be (was +90, topping out near 2.3x the base
+      // speed) so a long run gets noticeably harder without becoming
+      // unfair — it plateaus at a brisk-but-dodgeable pace instead of
+      // climbing indefinitely.
+      meteors.push({x: Math.random()*(W-50)+25, y:-50, size:50, speed:70+Math.min(35,score*0.1), elite:true, dodged:false, seed:Math.random()*100, rot:Math.random()*Math.PI*2, rotSpeed:(Math.random()-0.5)*1.2});
     } else {
       const size = 14 + Math.random()*22;
-      meteors.push({x: Math.random()*(W-size)+size/2, y:-size, size, speed: 90+Math.random()*120 + Math.min(140, score*0.3), elite:false, dodged:false, seed:Math.random()*100, rot:Math.random()*Math.PI*2, rotSpeed:(Math.random()-0.5)*1.6});
+      // Same idea for regular meteors: the score bonus used to be able to
+      // add up to 140 on top of a 90-210 base speed (more than doubling
+      // it) — capped much lower now so the game speeds up gradually
+      // instead of eventually being wall-to-wall near-max-speed rocks.
+      meteors.push({x: Math.random()*(W-size)+size/2, y:-size, size, speed: 90+Math.random()*120 + Math.min(55, score*0.2), elite:false, dodged:false, seed:Math.random()*100, rot:Math.random()*Math.PI*2, rotSpeed:(Math.random()-0.5)*1.6});
     }
   }
   function spawnPowerup(){
