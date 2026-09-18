@@ -4,4 +4,4 @@
    to the public HTTPS/WSS URL of the Node server, e.g.:
      window.ARCADE_ONLINE_SERVER = 'https://your-server.example.com';
 */
-window.ARCADE_ONLINE_SERVER = '';
+window.ARCADE_ONLINE_SERVER = 'https://arcade-website-vvap.onrender.com/';
