@@ -112,7 +112,7 @@
   .hud div{background:var(--panel2);padding:6px 14px;border-radius:8px;border:1px solid var(--border);font-size:0.9rem;box-shadow:inset 0 1px 0 rgba(255,255,255,.04), 0 2px 6px rgba(0,0,0,.15);}
   .hud b{color:var(--yellow);}
   canvas{
-    background:#000;border-radius:9px;display:block;max-width:100%;
+    background:#000;border-radius:9px;display:block;max-width:100%;height:auto;
     box-shadow:0 0 0 1px rgba(255,255,255,.05), 0 10px 30px rgba(0,0,0,.4), 0 0 34px rgba(80,200,255,.05);
   }
   .msg{color:var(--yellow);font-size:1.1rem;margin:10px 0;text-align:center;}
@@ -165,6 +165,34 @@
      match instead of overlapping. */
   .game-page{ max-width:1500px; }
   #game-fs-target{ zoom:1.35; }
+
+  /* Slim top bar on every game/hub page — replaces the old full hero
+     header (big Monoton wordmark + generic "click a tile to play"
+     tagline, which never applied here and just ate space above the
+     fold, especially with #game-fs-target's zoom on small screens).
+     The back button + game title right below already carry the real
+     navigation, so this bar only needs to hold the brand link and a
+     small reminder about the Esc shortcut. */
+  .game-topbar{
+    display:flex;align-items:center;justify-content:center;
+    gap:8px 14px;flex-wrap:wrap;margin-bottom:14px;
+  }
+  .game-brand{
+    font-family:'Monoton','Segoe UI',cursive;font-weight:400;
+    color:var(--cyan);font-size:0.95rem;letter-spacing:2px;
+    text-decoration:none;text-shadow:0 0 8px rgba(80,200,255,.5);
+    white-space:nowrap;
+  }
+  .game-brand:hover{ text-shadow:0 0 8px rgba(80,200,255,.8), 0 0 18px rgba(80,200,255,.4); }
+  .game-topbar-hint{ color:var(--dim); font-size:0.78rem; }
+  .game-topbar-hint kbd{
+    background:var(--panel2); border:1px solid var(--border); border-radius:4px;
+    padding:1px 6px; font-size:0.72rem; color:var(--text); font-family:inherit;
+  }
+  @media (max-width:520px){
+    .game-topbar{ margin-bottom:10px; }
+    .game-topbar-hint{ display:none; } /* Esc is a keyboard shortcut; no keyboard on touch */
+  }
 
 /* ============================================================
    HOMEPAGE POLISH
@@ -504,6 +532,14 @@ canvas{ touch-action:none; }
 .chess-hub-grid .tile .name{display:block;font-size:1.08rem;}
 .chess-hub-grid .tile .best{line-height:1.45;}
 .chess-board{box-shadow:0 12px 30px rgba(0,0,0,.25);}
+
+/* Three-player hex board is rendered as a raw SVG with a fixed pixel
+   width/height attribute (its hex-grid geometry is easiest to compute in
+   real px), unlike the other boards here which build their fluid width
+   into the markup itself. Constrain it the same way canvases already
+   are, so it shrinks on phones instead of overflowing. */
+.hex-board-wrap{width:100%;max-width:520px;min-width:0;display:flex;justify-content:center;}
+.hex-board-wrap svg{max-width:100%;height:auto;display:block;box-shadow:0 12px 30px rgba(0,0,0,.25);}
 @media(max-width:520px){
   #game-container{padding:14px 8px;}
   .chess-hub-grid{grid-template-columns:1fr;}
@@ -527,6 +563,8 @@ canvas{ touch-action:none; }
   .c4-board{grid-template-columns:repeat(7,minmax(34px,1fr));width:min(420px,100%);gap:4px;padding:6px}
   .c4-cell{width:auto;height:auto;aspect-ratio:1}
   .mem-card{width:auto;height:auto;aspect-ratio:1}
+  .ms-board{width:100%;justify-content:center}
+  .ms-cell{width:auto;height:auto;aspect-ratio:1;font-size:clamp(.55rem,3.6vw,.85rem)}
   .g2048-board{max-width:100%;grid-auto-rows:1fr}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}

@@ -1,7 +1,7 @@
 /* STATS & ACHIEVEMENTS */
 (function(){
   function row(label, value){
-    return `<div style="display:flex;justify-content:space-between;width:340px;padding:6px 0;border-bottom:1px solid var(--border);">
+    return `<div style="display:flex;justify-content:space-between;width:min(92vw,340px);padding:6px 0;border-bottom:1px solid var(--border);">
       <span>${label}</span><span style="color:var(--yellow);">${value}</span></div>`;
   }
   function init(c){

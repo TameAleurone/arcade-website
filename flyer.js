@@ -221,13 +221,18 @@
     container=c; best=Store.get('flyer_high',0);
     container.innerHTML = `
       <canvas id="flyer-canvas" width="${W}" height="${H}"></canvas>
-      <div class="controls-hint">Click canvas or press Space to flap through the pipes<br>
+      <div class="controls-hint">Tap or click canvas, or press Space, to flap through the pipes<br>
         Collect coins &bull; <span style="color:#50ffea;">S shield</span> &bull; <span style="color:#a050ff;">SM slow-mo</span> &bull;
         <span style="color:#ff50c8;">M magnet</span> &bull; <span style="color:#ffd700;">2x coins</span>
       </div>
     `;
     canvas=document.getElementById('flyer-canvas'); ctx=canvas.getContext('2d');
     canvas.addEventListener('mousedown', flap);
+    // Flyer is timing-sensitive, so tapping needs its own listener rather
+    // than relying on the browser's synthesized mousedown/click after a
+    // touch (which can lag ~300ms and isn't guaranteed on every browser) —
+    // same pattern dino.js and breakout.js already use for their canvases.
+    canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); flap(); }, {passive:false});
     document.addEventListener('keydown', key);
     initState();
     animId = requestAnimationFrame(loop);

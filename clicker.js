@@ -93,7 +93,7 @@
     UPGRADES.forEach((u,i)=>{
       const cost = upgradeCost(u[1], counts[i]);
       const row = document.createElement('div');
-      row.style.cssText='display:flex;justify-content:space-between;align-items:center;width:360px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:6px;';
+      row.style.cssText='display:flex;justify-content:space-between;align-items:center;width:min(92vw,360px);background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:6px;';
       row.innerHTML = `<div><b>${u[0]}</b><br><span style="color:var(--dim);font-size:0.8rem;">owned ${counts[i]} &bull; +${u[2]}/s${u[3]?` &bull; +${u[3]} click`:''}</span></div>`;
       const btn = document.createElement('button');
       btn.className='btn'+(coins>=cost?' primary':'');

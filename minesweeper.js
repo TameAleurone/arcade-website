@@ -48,7 +48,12 @@
   function renderMsg(t){ document.getElementById('ms-msg').textContent = t; }
   function render(){
     const el = document.getElementById('ms-board');
-    el.style.gridTemplateColumns = `repeat(${cols}, 26px)`;
+    // minmax(0, 26px) lets columns shrink below 26px when the board is
+    // wider than the screen (16-col Hard mode is ~440px, wider than most
+    // phones) instead of a fixed 26px track forcing the whole board to
+    // overflow. .ms-cell drops its own fixed size on narrow screens (see
+    // style.css) so cells can actually follow the track down.
+    el.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 26px))`;
     el.innerHTML='';
     for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
       const cell = board[r][c];

@@ -544,7 +544,7 @@ function createChessVariant(variant, displayName){
         <div class="chess-play-inner">
           <div class="msg chess-msg"></div>
           ${variant!=='fischer_random' ? '<div class="chess-castling" aria-live="polite"></div>' : ''}
-          <div class="chess-captured" style="display:flex;justify-content:space-between;width:352px;margin:0 auto 6px;font-size:0.85rem;"></div>
+          <div class="chess-captured" style="display:flex;justify-content:space-between;width:min(92vw,352px);margin:0 auto 6px;font-size:0.85rem;"></div>
           ${variant==='drawback_chess' ? '<div class="chess-drawbacks" style="font-size:0.8rem;color:var(--dim);text-align:center;margin-bottom:8px;max-width:420px;"></div>' : ''}
           ${variant==='spell_chess' ? '<div class="chess-spells" style="display:flex;gap:8px;justify-content:center;margin-bottom:8px;"></div>' : ''}
           <div class="chess-board" aria-label="Chess board" role="grid" style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));grid-template-rows:repeat(8,minmax(0,1fr));width:min(92vw,352px);aspect-ratio:1;border:2px solid #3a3a55;"></div>

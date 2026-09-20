@@ -69,7 +69,7 @@
     BUILDINGS.forEach((b,i)=>{
       const cost = upgradeCost(b[1], counts[i]);
       const row = document.createElement('div');
-      row.style.cssText='display:flex;justify-content:space-between;align-items:center;width:360px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:6px;';
+      row.style.cssText='display:flex;justify-content:space-between;align-items:center;width:min(92vw,360px);background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:6px;';
       row.innerHTML = `<div><b>${b[0]}</b><br><span style="color:var(--dim);font-size:0.8rem;">owned ${counts[i]} &bull; +${b[2]} gold/s each</span></div>`;
       const btn = document.createElement('button');
       btn.className='btn'+(gold>=cost?' primary':'');

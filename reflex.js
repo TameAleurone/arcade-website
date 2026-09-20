@@ -46,7 +46,7 @@
     container=c;
     container.innerHTML = `
       <div class="hud"><div id="reflex-best">Best: <b>-</b></div><div id="reflex-session">Session: 0 rounds</div></div>
-      <button type="button" id="reflex-zone" style="width:340px;height:200px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+      <button type="button" id="reflex-zone" style="width:min(92vw,340px);height:200px;border-radius:12px;display:flex;align-items:center;justify-content:center;
         background:#20233a;color:#fff;font-size:1.2rem;cursor:pointer;text-align:center;padding:10px;">Click to start</button>
       <div class="msg" id="reflex-result"></div>
       <div class="controls-hint">Click the box, wait for it to turn green, then click as fast as you can.</div>
