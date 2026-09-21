@@ -224,8 +224,32 @@
     loopOnce();
   }
 
+  // JSONP GET requests put the entire payload in the URL. That worked for
+  // short messages but the full chess state grows as history/positionCounts
+  // grow, and proxies/browser URL limits can start rejecting it around the
+  // middle of a game. Use a cross-origin HTML form POST instead: forms are
+  // allowed by browsers even when connect-src blocks fetch/WebSocket, and the
+  // state travels in the request body with no URL-length limit. We don't need
+  // to read the POST response because the server immediately forwards the
+  // message to the other player.
   function sendRawJsonp(payload){
-    jsonpCall('send', {room, role, token:myToken, payload:JSON.stringify(payload)}).catch(()=>{});
+    const frame=document.createElement('iframe');
+    frame.name='__arcadeSend_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+    frame.style.display='none';
+    document.body.appendChild(frame);
+    const form=document.createElement('form');
+    form.method='POST';
+    form.action=httpBaseUrl()+'/jsonp/send?room='+encodeURIComponent(room)+'&role='+encodeURIComponent(role)+'&token='+encodeURIComponent(myToken);
+    form.target=frame.name;
+    form.style.display='none';
+    const input=document.createElement('input');
+    input.type='hidden';
+    input.name='payload';
+    input.value=JSON.stringify(payload);
+    form.appendChild(input);
+    document.body.appendChild(form);
+    try{ form.submit(); }catch(_){ }
+    setTimeout(()=>{ try{form.remove(); frame.remove();}catch(_){} },15000);
   }
 
   // ---- Transport-agnostic public API ---------------------------------
