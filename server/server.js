@@ -24,8 +24,18 @@ const ACTION_LIMIT = 20; // host/join attempts per window, per connection or IP
 // a poll the client is expected to keep re-issuing; the poll is held open
 // (classic long-polling) so delivery still feels close to instant instead
 // of only arriving on a fixed timer.
-const JSONP_LONGPOLL_MS = 15000;
-const JSONP_STALE_MS = 25000; // a jsonp peer that hasn't polled in this long is treated as gone
+// Render's free-tier proxy has been reported to cut off a single request
+// at around 15s (community.render.com/t/15-second-request-timeout/568) —
+// holding a long-poll open for exactly that long meant it could get cut
+// off by the *platform* before this server ever got to respond, with no
+// error surfacing anywhere except the guest's screen quietly never
+// updating again. 9s leaves real margin under that, and the periodic
+// keep-alive write below (see pollWaiters) is a second line of defense
+// in case some other host's proxy times out on idle bytes rather than
+// total duration.
+const JSONP_LONGPOLL_MS = 9000;
+const JSONP_KEEPALIVE_MS = 4000; // how often to write a harmless keep-alive chunk while a poll waits
+const JSONP_STALE_MS = 20000; // a jsonp peer that hasn't polled in this long is treated as gone
 const rooms = new Map();
 
 function roomCode(){
@@ -57,14 +67,29 @@ function wsFail(ws, message){
 // never caring which transport the *other* side is using — a host on
 // GitHub Pages (WebSocket) and a guest on Neocities (JSONP) can play each
 // other without either side knowing the difference.
+// A waiting poll's headers are sent as soon as the wait begins (see
+// /jsonp/poll below), so finishing it is always a plain res.end() with
+// the real payload — never a fresh writeHead. clearJsonpWaiter() alone
+// (no write) is for an aborted connection, where there's nothing left to
+// write to.
+function clearJsonpWaiter(peer){
+  const w = peer.waiter;
+  if(!w) return null;
+  peer.waiter = null;
+  clearTimeout(w.timer);
+  if(w.keepAlive) clearInterval(w.keepAlive);
+  return w;
+}
+function finishJsonpWait(peer, data){
+  const w = clearJsonpWaiter(peer);
+  if(!w) return;
+  try{ w.res.end(w.cb+'('+JSON.stringify(data)+');'); }catch(_){}
+}
+
 function peerSend(peer, msg){
   if(!peer) return;
   if(peer.kind==='ws'){ wsSend(peer.ws, msg); return; }
-  if(peer.waiter){
-    const w=peer.waiter; peer.waiter=null; clearTimeout(w.timer);
-    try{ respondJsonp(w.res, w.cb, [msg]); }catch(_){}
-    return;
-  }
+  if(peer.waiter){ finishJsonpWait(peer, [msg]); return; }
   peer.queue.push(msg);
   if(peer.queue.length>200) peer.queue.shift(); // drop oldest if a peer stops polling but isn't stale yet
 }
@@ -73,10 +98,7 @@ function leaveRoomPeer(room, peer){
   if(!room || !peer) return;
   if(room.host===peer) room.host=null;
   if(room.guest===peer) room.guest=null;
-  if(peer.kind==='jsonp' && peer.waiter){
-    const w=peer.waiter; peer.waiter=null; clearTimeout(w.timer);
-    try{ respondJsonp(w.res, w.cb, []); }catch(_){}
-  }
+  if(peer.kind==='jsonp' && peer.waiter) finishJsonpWait(peer, []);
   const other=room.host || room.guest;
   if(other) peerSend(other,{type:'peer-disconnected'});
   if(!room.host && !room.guest) rooms.delete(room.code);
@@ -178,13 +200,20 @@ function handleJsonp(req, res, pathname, params){
     }
     // Nothing queued yet — hold the request open (classic long-poll) so
     // the reply can go out the instant something arrives, instead of the
-    // client only finding out on its next fixed-interval poll.
-    if(peer.waiter){ const w=peer.waiter; peer.waiter=null; clearTimeout(w.timer); try{ respondJsonp(w.res,w.cb,[]); }catch(_){} }
+    // client only finding out on its next fixed-interval poll. Headers go
+    // out now (not when the wait ends) so the periodic keep-alive below
+    // can write to an already-open response.
+    if(peer.waiter) finishJsonpWait(peer, []);
+    res.writeHead(200,{'Content-Type':'text/javascript; charset=utf-8','Cache-Control':'no-store'});
+    // A harmless empty statement, just to put bytes on the wire — some
+    // hosts' proxies time out a request that goes quiet for too long even
+    // if the overall duration is still under their hard cap.
+    const keepAlive=setInterval(()=>{ try{ res.write(';\n'); }catch(_){} }, JSONP_KEEPALIVE_MS);
     const timer=setTimeout(()=>{
-      if(peer.waiter && peer.waiter.res===res){ peer.waiter=null; try{ respondJsonp(res,cb,[]); }catch(_){} }
+      if(peer.waiter && peer.waiter.res===res) finishJsonpWait(peer, []);
     }, JSONP_LONGPOLL_MS);
-    peer.waiter={res,cb,timer};
-    req.on('close',()=>{ if(peer.waiter && peer.waiter.res===res){ clearTimeout(peer.waiter.timer); peer.waiter=null; } });
+    peer.waiter={res,cb,timer,keepAlive};
+    req.on('close',()=>{ if(peer.waiter && peer.waiter.res===res) clearJsonpWaiter(peer); });
     return;
   }
 
