@@ -11,6 +11,11 @@ function createChessVariant(variant, displayName){
   let container, state, selected, legalTargets, mode, aiColor, aiDepth, pendingPromotion, diceValues, diceRemaining, movesLeftThisTurn, spellMode, aiThinking, handoverPending, onlineRole, myColor;
   let undoStack=[];
   let redoStack=[];
+  // Online state sequencing: the host is authoritative. If the guest misses
+  // a state packet, it asks for the latest full state instead of remaining
+  // stuck on an old board.
+  let onlineStateSeq=0;
+  let lastOnlineStateSeq=0;
   let orientation='w';
 
   function pieceSquareEl(r,c){ return container.querySelector(`[data-r="${r}"][data-c="${c}"]`); }
@@ -27,6 +32,17 @@ function createChessVariant(variant, displayName){
   function onlineStatus(text){ const e=container && container.querySelector('#chess-online-status'); if(e) e.textContent=text; }
   function sendOnline(msg){ if(window.ArcadeOnline && ArcadeOnline.connected()) ArcadeOnline.send(msg); }
   function fullSyncPayload(){ return {state, diceValues, diceRemaining, movesLeftThisTurn}; }
+  function broadcastOnlineState(){
+    if(mode==='online' && onlineRole==='host' && ArcadeOnline && ArcadeOnline.connected()){
+      onlineStateSeq++;
+      sendOnline({type:'state', seq:onlineStateSeq, payload:fullSyncPayload()});
+    }
+  }
+  function requestOnlineSync(){
+    if(mode==='online' && onlineRole==='guest' && ArcadeOnline && ArcadeOnline.connected()){
+      sendOnline({type:'requestSync', lastSeq:lastOnlineStateSeq});
+    }
+  }
   function applyFullSync(p){
     mode='online';
     state = p.state; diceValues = p.diceValues; diceRemaining = p.diceRemaining; movesLeftThisTurn = p.movesLeftThisTurn;
@@ -76,7 +92,7 @@ function createChessVariant(variant, displayName){
         onMessage:onGuestMessage,
         onClose:()=>{ onlineStatus('Host disconnected.'); },
         onReconnecting:()=>onlineStatus('Connection dropped — reconnecting…'),
-        onReconnected:()=>onlineStatus('Reconnected!')
+        onReconnected:()=>{ onlineStatus('Reconnected!'); requestOnlineSync(); }
       });
       onlineStatus('Connected! You are Black. Waiting for the host to start…');
       showOnlinePlay();
@@ -85,14 +101,24 @@ function createChessVariant(variant, displayName){
     }
   }
   function onHostMessage(m){
-    if(!m || state.turn!=='b') return; // only accept requests when it's actually the guest's turn
+    if(!m) return;
+    if(m.type==='requestSync'){ broadcastOnlineState(); return; }
+    if(state.turn!=='b') return; // only accept moves/actions when it is the guest's turn
     if(m.type==='requestMove') commitAndAdvance(m.move);
     else if(m.type==='requestTeleport') doTeleport(m.fr, m.fc, m.tr, m.tc);
     else if(m.type==='requestShield') doShield(m.r, m.c);
   }
   function onGuestMessage(m){
     if(!m) return;
-    if(m.type==='state') applyFullSync(m.payload);
+    if(m.type==='state'){
+      const seq=Number(m.seq)||0;
+      // A gap means one or more state packets were lost. Ask the host for
+      // its current authoritative state rather than waiting indefinitely.
+      if(seq && lastOnlineStateSeq && seq>lastOnlineStateSeq+1) requestOnlineSync();
+      if(seq && seq<=lastOnlineStateSeq) return;
+      if(seq) lastOnlineStateSeq=seq;
+      if(m.payload) applyFullSync(m.payload);
+    }
   }
 
   function newGame(opts){
@@ -101,11 +127,13 @@ function createChessVariant(variant, displayName){
     mode = opts.mode; aiColor = opts.aiColor||'b'; aiDepth = opts.aiDepth||2;
     handoverPending = (mode==='2p'); // confirm who's starting before White's very first move too
     undoStack=[]; redoStack=[]; orientation='w';
+    if(mode==='online' && onlineRole==='host') onlineStateSeq=0;
+    if(mode==='online' && onlineRole==='guest') lastOnlineStateSeq=0;
     if(variant==='dice_chess'){ movesLeftThisTurn=3; rollDice(); skipUnplayableDiceTurns(); }
     if(variant==='drawback_chess'){ state.drawbacks = {w:assignDrawback(), b:assignDrawback()}; }
     render();
     maybeTriggerAI();
-    if(mode==='online' && onlineRole==='host') sendOnline({type:'state', payload: fullSyncPayload()});
+    if(mode==='online' && onlineRole==='host') broadcastOnlineState();
   }
   function rollDice(){
     const types=['P','N','B','R','Q','K'];
@@ -311,7 +339,7 @@ function createChessVariant(variant, displayName){
     }
     render();
     maybeTriggerAI();
-    if(mode==='online' && onlineRole==='host') sendOnline({type:'state', payload: fullSyncPayload()});
+    if(mode==='online' && onlineRole==='host') broadcastOnlineState();
   }
   function maybeTriggerAI(){
     if(mode!=='ai') return;
