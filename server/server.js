@@ -94,6 +94,19 @@ function peerSend(peer, msg){
   if(peer.queue.length>200) peer.queue.shift(); // drop oldest if a peer stops polling but isn't stale yet
 }
 
+// Keep the newest authoritative chess state in the room as well as forwarding
+// it to the other player. This makes a state packet recoverable if a browser,
+// proxy, or JSONP request drops that particular response.
+function rememberRoomState(room, payload){
+  if(!room || !payload || payload.type!=='state') return;
+  room.latestState=payload;
+}
+
+function sendLatestRoomState(room, peer){
+  if(!room || !peer || !room.latestState) return;
+  peerSend(peer,{type:'message',payload:room.latestState});
+}
+
 function leaveRoomPeer(room, peer){
   if(!room || !peer) return;
   if(room.host===peer) room.host=null;
@@ -143,7 +156,7 @@ function handleJsonp(req, res, pathname, params){
     const newCode=roomCode();
     const hostToken=makeToken();
     const peer={kind:'jsonp', token:hostToken, queue:[], lastSeen:Date.now(), waiter:null};
-    rooms.set(newCode,{code:newCode, host:peer, guest:null, hostToken});
+    rooms.set(newCode,{code:newCode, host:peer, guest:null, hostToken, latestState:null});
     return respondJsonp(res,cb,{type:'hosted',room:newCode,token:hostToken});
   }
 
@@ -156,6 +169,9 @@ function handleJsonp(req, res, pathname, params){
     const peer={kind:'jsonp', token:guestToken, queue:[], lastSeen:Date.now(), waiter:null};
     room.guest=peer;
     if(room.host) peerSend(room.host,{type:'peer-connected'});
+    // If this is a reconnect or a guest joining after the host already has
+    // an authoritative position, give the guest that position immediately.
+    sendLatestRoomState(room, peer);
     return respondJsonp(res,cb,{type:'joined',room:code,token:guestToken});
   }
 
@@ -168,6 +184,7 @@ function handleJsonp(req, res, pathname, params){
     const peer={kind:'jsonp', token, queue:[], lastSeen:Date.now(), waiter:null};
     room.host=peer;
     if(room.guest) peerSend(room.guest,{type:'peer-connected'});
+    // Reclaimed hosts keep the room's cached state; no game reset is needed.
     return respondJsonp(res,cb,{type:'hosted',room:code,token});
   }
 
@@ -187,6 +204,16 @@ function handleJsonp(req, res, pathname, params){
     let payload;
     try{ payload=JSON.parse(payloadRaw); }catch{ return respondJsonp(res,cb,{type:'error',message:'Invalid message.'}); }
     peer.lastSeen=Date.now();
+
+    // A guest's sync request can be answered from the room cache directly.
+    // This is important because the original request could itself have been
+    // delivered while the corresponding state packet was lost.
+    if(role==='guest' && payload && payload.type==='requestSync'){
+      sendLatestRoomState(room, peer);
+      return respondJsonp(res,cb,{type:'ack'});
+    }
+
+    if(role==='host') rememberRoomState(room,payload);
     const other = role==='host' ? room.guest : room.host;
     if(other) peerSend(other,{type:'message',payload});
     return respondJsonp(res,cb,{type:'ack'});
@@ -303,7 +330,7 @@ wss.on('connection',(ws)=>{
       const code=roomCode();
       const token=makeToken();
       const peer={kind:'ws', ws};
-      rooms.set(code,{code, host:peer, guest:null, hostToken:token});
+      rooms.set(code,{code, host:peer, guest:null, hostToken:token, latestState:null});
       ws.roomCode=code; ws.role='host'; ws.peer=peer;
       return wsSend(ws,{type:'hosted',room:code,token});
     }
@@ -319,6 +346,7 @@ wss.on('connection',(ws)=>{
       room.guest=peer; ws.roomCode=code; ws.role='guest'; ws.peer=peer;
       wsSend(ws,{type:'joined',room:code});
       if(room.host) peerSend(room.host,{type:'peer-connected'});
+      sendLatestRoomState(room, peer);
       return;
     }
 
@@ -347,8 +375,18 @@ wss.on('connection',(ws)=>{
       if(!ws.roomCode) return wsFail(ws,'You are not in a room.');
       const room=rooms.get(ws.roomCode);
       if(!room) return wsFail(ws,'Room no longer exists.');
+      const payload=msg.payload;
+
+      // Answer a guest sync request from the cached authoritative state even
+      // if the host's original state packet was missed.
+      if(ws.peer===room.guest && payload && payload.type==='requestSync'){
+        sendLatestRoomState(room, ws.peer);
+        return;
+      }
+
+      if(ws.peer===room.host) rememberRoomState(room,payload);
       const other=ws.peer===room.host ? room.guest : room.host;
-      if(other) peerSend(other,{type:'message',payload:msg.payload});
+      if(other) peerSend(other,{type:'message',payload});
       return;
     }
 
