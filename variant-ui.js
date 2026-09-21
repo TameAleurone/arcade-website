@@ -54,11 +54,19 @@ function createChessVariant(variant, displayName){
     lastOnlineStateAt=Date.now();
     onlineSyncWatchdog=setInterval(()=>{
       if(mode!=='online' || onlineRole!=='guest' || !ArcadeOnline || !ArcadeOnline.connected()) return;
-      // When Black still thinks it is White's turn, the most likely cause is
-      // a missed authoritative state packet. Ask the server for its cached
-      // latest state so a single dropped JSONP/WebSocket message cannot leave
-      // the two boards permanently out of sync.
-      if(state && state.turn==='w' && Date.now()-lastOnlineStateAt>2500) requestOnlineSync();
+      // Two different things can leave the guest stuck, and both need the
+      // same fix (ask the host to resend its state):
+      //  - `state` is still null: the very first broadcast after joining
+      //    never arrived (dropped WS message, or a JSONP race where the
+      //    host's broadcast fired before the guest's poll loop was up).
+      //    The board area just stays empty forever — this is the "Black's
+      //    board never loads" case, and the old `state && ...` guard below
+      //    meant the watchdog could never fire to recover from it.
+      //  - `state` exists but is stuck showing White's turn: a later
+      //    packet got dropped mid-game.
+      const stuckWithNoStateYet = !state;
+      const stuckMidGame = state && state.turn==='w';
+      if((stuckWithNoStateYet || stuckMidGame) && Date.now()-lastOnlineStateAt>2500) requestOnlineSync();
     }, 1000);
   }
   function applyFullSync(p){
