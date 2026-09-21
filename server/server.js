@@ -141,9 +141,28 @@ setInterval(()=>{
   }
 }, 60000);
 
+function readRequestBody(req, maxBytes=MAX_MESSAGE+8192){
+  return new Promise((resolve,reject)=>{
+    let size=0, chunks=[];
+    req.on('data',chunk=>{
+      size += chunk.length;
+      if(size>maxBytes){ reject(new Error('Request body too large.')); try{req.destroy();}catch(_){} return; }
+      chunks.push(chunk);
+    });
+    req.on('end',()=>resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error',reject);
+  });
+}
+
 function handleJsonp(req, res, pathname, params){
   const cb = params.get('callback')||'';
-  if(!CALLBACK_RE.test(cb)){ res.writeHead(400,{'Content-Type':'text/plain'}); return res.end('Invalid or missing callback.'); }
+  // GET JSONP needs a callback. POST /jsonp/send is intentionally callback-free:
+  // the client uses a normal HTML form submission so the chess state is in the
+  // request body instead of the URL. This avoids proxy/browser URL-length limits
+  // that are reached as the state.history and positionCounts arrays grow.
+  if(req.method!=='POST' && !CALLBACK_RE.test(cb)){
+    res.writeHead(400,{'Content-Type':'text/plain'}); return res.end('Invalid or missing callback.');
+  }
 
   const ip = (req.socket && req.socket.remoteAddress) || 'unknown';
   const code = String(params.get('room')||'').toUpperCase();
@@ -199,24 +218,49 @@ function handleJsonp(req, res, pathname, params){
   if(!peer || peer.kind!=='jsonp' || peer.token!==token) return respondJsonp(res,cb,{type:'error',message:'Not authorized for that room.'});
 
   if(pathname==='/jsonp/send'){
-    const payloadRaw=params.get('payload')||'';
-    if(payloadRaw.length>MAX_MESSAGE) return respondJsonp(res,cb,{type:'error',message:'Message too large.'});
-    let payload;
-    try{ payload=JSON.parse(payloadRaw); }catch{ return respondJsonp(res,cb,{type:'error',message:'Invalid message.'}); }
-    peer.lastSeen=Date.now();
+    const processSend = (payloadRaw)=>{
+      if(payloadRaw.length>MAX_MESSAGE) return req.method==='POST'
+        ? (res.writeHead(413,{'Content-Type':'text/plain'}), res.end('Message too large.'))
+        : respondJsonp(res,cb,{type:'error',message:'Message too large.'});
+      let payload;
+      try{ payload=JSON.parse(payloadRaw); }
+      catch{
+        return req.method==='POST'
+          ? (res.writeHead(400,{'Content-Type':'text/plain'}), res.end('Invalid message.'))
+          : respondJsonp(res,cb,{type:'error',message:'Invalid message.'});
+      }
+      peer.lastSeen=Date.now();
 
-    // A guest's sync request can be answered from the room cache directly.
-    // This is important because the original request could itself have been
-    // delivered while the corresponding state packet was lost.
-    if(role==='guest' && payload && payload.type==='requestSync'){
-      sendLatestRoomState(room, peer);
+      // A guest's sync request can be answered from the room cache directly.
+      // This is important because the original request could itself have been
+      // delivered while the corresponding state packet was lost.
+      if(role==='guest' && payload && payload.type==='requestSync'){
+        sendLatestRoomState(room, peer);
+        if(req.method==='POST') { res.writeHead(204); return res.end(); }
+        return respondJsonp(res,cb,{type:'ack'});
+      }
+
+      if(role==='host') rememberRoomState(room,payload);
+      const other = role==='host' ? room.guest : room.host;
+      if(other) peerSend(other,{type:'message',payload});
+      if(req.method==='POST') { res.writeHead(204); return res.end(); }
       return respondJsonp(res,cb,{type:'ack'});
+    };
+
+    if(req.method==='POST'){
+      readRequestBody(req).then(raw=>{
+        let body;
+        try{ body=new URLSearchParams(raw); }
+        catch{ res.writeHead(400,{'Content-Type':'text/plain'}); return res.end('Invalid form body.'); }
+        processSend(body.get('payload')||'');
+      }).catch(err=>{
+        if(!res.headersSent) res.writeHead(413,{'Content-Type':'text/plain'});
+        if(!res.writableEnded) res.end(err.message||'Request body too large.');
+      });
+      return;
     }
 
-    if(role==='host') rememberRoomState(room,payload);
-    const other = role==='host' ? room.guest : room.host;
-    if(other) peerSend(other,{type:'message',payload});
-    return respondJsonp(res,cb,{type:'ack'});
+    return processSend(params.get('payload')||'');
   }
 
   if(pathname==='/jsonp/poll'){
