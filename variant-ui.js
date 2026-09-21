@@ -16,6 +16,7 @@ function createChessVariant(variant, displayName){
   // stuck on an old board.
   let onlineStateSeq=0;
   let lastOnlineStateSeq=0;
+  let syncRequestPending=false;
   let orientation='w';
 
   function pieceSquareEl(r,c){ return container.querySelector(`[data-r="${r}"][data-c="${c}"]`); }
@@ -39,8 +40,10 @@ function createChessVariant(variant, displayName){
     }
   }
   function requestOnlineSync(){
-    if(mode==='online' && onlineRole==='guest' && ArcadeOnline && ArcadeOnline.connected()){
+    if(mode==='online' && onlineRole==='guest' && ArcadeOnline && ArcadeOnline.connected() && !syncRequestPending){
+      syncRequestPending=true;
       sendOnline({type:'requestSync', lastSeq:lastOnlineStateSeq});
+      setTimeout(()=>{ syncRequestPending=false; }, 1000);
     }
   }
   function applyFullSync(p){
@@ -103,7 +106,10 @@ function createChessVariant(variant, displayName){
   function onHostMessage(m){
     if(!m) return;
     if(m.type==='requestSync'){ broadcastOnlineState(); return; }
-    if(state.turn!=='b') return; // only accept moves/actions when it is the guest's turn
+    // If the guest has a stale view and sends a move for the wrong turn,
+    // don't silently discard it. Resend the authoritative position so the
+    // guest can recover and become clickable again.
+    if(state.turn!=='b'){ broadcastOnlineState(); return; }
     if(m.type==='requestMove') commitAndAdvance(m.move);
     else if(m.type==='requestTeleport') doTeleport(m.fr, m.fc, m.tr, m.tc);
     else if(m.type==='requestShield') doShield(m.r, m.c);
@@ -117,6 +123,7 @@ function createChessVariant(variant, displayName){
       if(seq && lastOnlineStateSeq && seq>lastOnlineStateSeq+1) requestOnlineSync();
       if(seq && seq<=lastOnlineStateSeq) return;
       if(seq) lastOnlineStateSeq=seq;
+      syncRequestPending=false;
       if(m.payload) applyFullSync(m.payload);
     }
   }
@@ -200,7 +207,10 @@ function createChessVariant(variant, displayName){
     const status = currentAllowedMoves();
     if(status.over) return;
     const isHumanTurn = mode==='ai' ? state.turn!==aiColor : (mode==='online' ? state.turn===myColor : true);
-    if(!isHumanTurn) return;
+    if(!isHumanTurn){
+      if(mode==='online' && onlineRole==='guest') requestOnlineSync();
+      return;
+    }
 
     if(spellMode==='teleport-select'){
       const p = state.board[r][c];
@@ -292,6 +302,8 @@ function createChessVariant(variant, displayName){
     if(mode==='online' && onlineRole==='guest'){
       const candidate = promo ? {...move,promotion:promo} : move;
       sendOnline({type:'requestMove', move:candidate});
+      selected=null; legalTargets=[]; pendingPromotion=null;
+      render();
       return;
     }
     const requested = promo ? {...move,promotion:promo} : move;
