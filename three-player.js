@@ -146,15 +146,14 @@
     for(let i=0;i<3;i++){
       idx = (idx+1)%3;
       const cand = String(idx);
-      if(state.active.includes(cand)){
+      if(state.active.includes(cand) && allLegalMoves(state.board,cand).length>0){
         state.turn = cand;
-        if(allLegalMoves(state.board,cand).length===0){
-          // no legal moves - skip this player's turn immediately
-          idx = idx; continue;
-        }
         return;
       }
     }
+    // Every remaining player is completely stuck — exceptionally rare,
+    // but don't leave the game silently frozen with no result.
+    state.gameOver = true; state.winner = null;
   }
   const AI_PIECE_VAL = {P:100,N:320,B:330,R:500,Q:900,K:20000};
   function squareAttackedBy(board, q, r, color){

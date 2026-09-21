@@ -316,6 +316,11 @@ const ChessEngine = (function(){
       if(!myKing) return {over:true, result:`${oppo==='w'?'White':'Black'} wins — King Captured!`};
       if(!oppoKing) return {over:true, result:`${color==='w'?'White':'Black'} wins — King Captured!`};
       const moves = allLegalMoves(state, color);
+      // No check/checkmate in these variants, but a player can still end up
+      // with zero legal moves in a very constrained endgame — treat that
+      // the same way antichess does above rather than leaving the game
+      // stuck with no result.
+      if(moves.length===0) return {over:true, result:`${oppo==='w'?'White':'Black'} wins — ${color==='w'?'White':'Black'} has no legal moves!`};
       return {over:false, moves};
     }
     const moves = allLegalMoves(state, color);

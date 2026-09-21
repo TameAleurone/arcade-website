@@ -174,7 +174,15 @@
     if(ghostTimer>0){
       head.x = (head.x+cols)%cols; head.y = (head.y+rows)%rows;
     }
-    const dead = head.x<0||head.x>=cols||head.y<0||head.y>=rows||snake.some(s=>s.x===head.x&&s.y===head.y);
+    // The tail hasn't been popped for this move yet, so it's still sitting
+    // in `snake` — but if this move doesn't eat food, that tail cell is
+    // about to be vacated in this same step (see snake.pop() below), so
+    // moving into it is the ordinary "follow your own tail" maneuver, not
+    // a collision. Only count it as occupied when the move eats food,
+    // since growing means the tail stays put this frame.
+    const willEat = head.x===food.x && head.y===food.y;
+    const body = willEat ? snake : snake.slice(0,-1);
+    const dead = head.x<0||head.x>=cols||head.y<0||head.y>=rows||body.some(s=>s.x===head.x&&s.y===head.y);
     if(dead){
       alive=false; comboFlash=0;
       const best = Store.get('snake_high', 0);

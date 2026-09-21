@@ -119,7 +119,7 @@ function createChessVariant(variant, displayName){
     return ChessEngine.allLegalMoves(state, color).filter(m=>(diceRemaining[m.piece[1]]||0)>0);
   }
   function skipUnplayableDiceTurns(){
-    for(let guard=0; guard<8; guard++){
+    for(let guard=0; guard<40; guard++){
       const status = ChessEngine.gameStatus(state);
       if(status.over) return;
       if(diceMatchingMoves(state.turn).length>0) return;
@@ -127,6 +127,11 @@ function createChessVariant(variant, displayName){
       movesLeftThisTurn = 3;
       rollDice();
     }
+    // Vanishingly unlikely (needs 40 straight rolls to all miss the one
+    // or two piece types that can still move), but never leave the game
+    // stuck with zero legal moves for whoever's turn it lands on — drop
+    // the dice restriction for this turn instead of freezing.
+    diceRemaining = {P:99,N:99,B:99,R:99,Q:99,K:99};
   }
   function afterDiceMove(moverColor, movedType){
     movesLeftThisTurn--;

@@ -98,7 +98,13 @@
       powerups.forEach(p=> p.y += p.speed*dt);
       meteors = meteors.filter(m=>{
         if(m.y-m.size>H){
+          // m.dodged is never actually set elsewhere, so without this
+          // return the meteor stayed in the array forever once it passed
+          // the bottom of the screen — re-triggering registerDodge() (and
+          // its score/combo increments) on every single subsequent frame,
+          // forever, while also leaking an ever-growing meteors array.
           if(!m.dodged){ registerDodge(); if(m.elite) score += 20; }
+          return false;
         } else if(!m.dodged && m.y>player.y-45 && m.y<player.y+player.h+45){
           const gap=Math.abs((m.x)-(player.x+player.w/2));
           if(gap < 75 && gap > 30){ nearMisses++; score+=2; nearMissFlash=700; }

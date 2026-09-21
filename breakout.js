@@ -141,7 +141,11 @@
         if(ball.x+BALL_R>W){ ball.x=W-BALL_R; ball.vx*=-1; }
         if(ball.y-BALL_R<0){ ball.y=BALL_R; ball.vy*=-1; }
         const paddleY = H-PADDLE_Y_OFFSET;
-        if(ball.vy>0 && ball.y+BALL_R>=paddleY && ball.y+BALL_R<=paddleY+10 && ball.x>=paddleX && ball.x<=paddleX+paddleW){
+        // 10px used to just barely miss the ball's own worst-case per-frame
+        // movement (BASE_BALL_SPEED * the loop's 1/20s stutter clamp =
+        // 10.5px), which could let a frame drop tunnel the ball through
+        // the paddle undetected. 16px gives real headroom.
+        if(ball.vy>0 && ball.y+BALL_R>=paddleY && ball.y+BALL_R<=paddleY+16 && ball.x>=paddleX && ball.x<=paddleX+paddleW){
           if(stickyT>0 && !ball.fire){ ball.stuck=true; ball.vx=0; ball.vy=0; }
           else {
             const hit = (ball.x-(paddleX+paddleW/2))/(paddleW/2);

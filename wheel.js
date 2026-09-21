@@ -67,7 +67,14 @@
     return parts.length ? ` (${parts.join(', ')})` : '';
   }
   function determinePrize(){
-    const pointerAngle = 270;
+    // The pointer triangle is drawn at the wheel's right edge (cx+r, cy),
+    // which is canvas-angle 0° (canvas arc angles start at the positive
+    // x-axis and increase clockwise) — not 270°, which is the *top* of
+    // the wheel. With the old value this always resolved to whichever
+    // segment sat 270° away from the one the pointer was actually
+    // touching, so the reported prize essentially never matched what
+    // the wheel visually landed on.
+    const pointerAngle = 0;
     const normalized = ((pointerAngle - angle) % 360 + 360) % 360;
     const idx = Math.floor(normalized / sliceAngle) % n;
     const seg = segments[idx];
