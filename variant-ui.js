@@ -70,7 +70,7 @@ function createChessVariant(variant, displayName){
         onMessage:onHostMessage,
         onClose:()=>{ onlineStatus('Opponent disconnected.'); },
         onReconnecting:()=>onlineStatus('Connection dropped — reconnecting…'),
-        onReconnected:()=>onlineStatus('Reconnected. Waiting for your opponent…')
+        onReconnected:()=>{ onlineStatus('Reconnected. Syncing game…'); broadcastOnlineState(); }
       });
       container.querySelector('#chess-room-code').textContent = code;
       onlineStatus('Share this room code with your friend. Waiting…');
@@ -95,7 +95,7 @@ function createChessVariant(variant, displayName){
         onMessage:onGuestMessage,
         onClose:()=>{ onlineStatus('Host disconnected.'); },
         onReconnecting:()=>onlineStatus('Connection dropped — reconnecting…'),
-        onReconnected:()=>{ onlineStatus('Reconnected!'); requestOnlineSync(); }
+        onReconnected:()=>{ lastOnlineStateSeq=0; syncRequestPending=false; onlineStatus('Reconnected! Syncing…'); requestOnlineSync(); }
       });
       onlineStatus('Connected! You are Black. Waiting for the host to start…');
       showOnlinePlay();
@@ -134,7 +134,6 @@ function createChessVariant(variant, displayName){
     mode = opts.mode; aiColor = opts.aiColor||'b'; aiDepth = opts.aiDepth||2;
     handoverPending = (mode==='2p'); // confirm who's starting before White's very first move too
     undoStack=[]; redoStack=[]; orientation='w';
-    if(mode==='online' && onlineRole==='host') onlineStateSeq=0;
     if(mode==='online' && onlineRole==='guest') lastOnlineStateSeq=0;
     if(variant==='dice_chess'){ movesLeftThisTurn=3; rollDice(); skipUnplayableDiceTurns(); }
     if(variant==='drawback_chess'){ state.drawbacks = {w:assignDrawback(), b:assignDrawback()}; }
