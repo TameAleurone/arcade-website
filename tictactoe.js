@@ -14,7 +14,7 @@
   function applyMove(i,fromNetwork=false){
     if(over||board[i])return false;
     board[i]=turn; const w=checkWinner();
-    if(w)over=true; else turn=turn==='X'?'O':'X';
+    if(w){over=true; if(w!=='draw') (typeof Achievements!=='undefined'&&Achievements.unlock('tictactoe_win'));} else turn=turn==='X'?'O':'X';
     render(); return true;
   }
   function play(i){

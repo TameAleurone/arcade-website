@@ -553,6 +553,17 @@ function createChessVariant(variant, displayName){
     const msg = container.querySelector('.chess-msg');
     if(status.over){
       msg.textContent = status.result;
+      // One shared achievement across chess + every variant (they all run
+      // through this same render()). Only credit an actual decisive win
+      // for the human on this client, not a draw/stalemate and not the AI
+      // beating the human — result strings always read "White wins..." or
+      // "Black wins..." (checkmate, antichess's last-piece/no-moves wins,
+      // and dice/drawback chess's king-capture wins all say this).
+      const winnerColor = status.result.includes('White wins') ? 'w' : (status.result.includes('Black wins') ? 'b' : null);
+      if(winnerColor){
+        const humanWon = mode==='ai' ? winnerColor!==aiColor : (mode==='online' ? winnerColor===myColor : true);
+        if(humanWon) (typeof Achievements!=='undefined'&&Achievements.unlock('chess_checkmate'));
+      }
     } else if(aiThinking){
       msg.textContent = 'AI is thinking...';
     } else {

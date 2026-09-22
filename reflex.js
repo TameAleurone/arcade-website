@@ -30,6 +30,8 @@
       rounds++; totalMs+=rt; streak++; bestStreak=Math.max(bestStreak,streak);
       const best = Store.get('reflex_best', null);
       if(best===null || rt<best) Store.set('reflex_best', Math.round(rt));
+      if(rt<220) (typeof Achievements!=='undefined'&&Achievements.unlock('reflex_220'));
+      if(rt<180) (typeof Achievements!=='undefined'&&Achievements.unlock('reflex_180'));
       document.getElementById('reflex-result').textContent = `Reaction time: ${rt.toFixed(0)} ms • Session avg: ${(totalMs/rounds).toFixed(0)} ms • Streak: ${streak}`;
       updateBest();
       setState('idle','Click to try again');

@@ -141,7 +141,12 @@
     advanceTurn();
   }
   function advanceTurn(){
-    if(state.active.length<=1){ state.gameOver=true; state.winner=state.active[0]||null; return; }
+    if(state.active.length<=1){
+      state.gameOver=true; state.winner=state.active[0]||null;
+      const humanWon = state.winner!==null && (state.mode==='hotseat' || state.winner==='0');
+      if(humanWon) (typeof Achievements!=='undefined'&&Achievements.unlock('three_player_chess_win'));
+      return;
+    }
     let idx = ['0','1','2'].indexOf(state.turn);
     for(let i=0;i<3;i++){
       idx = (idx+1)%3;

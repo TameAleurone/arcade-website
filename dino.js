@@ -90,6 +90,8 @@
             else {
               gameOver=true;
               if(score>best){ best=score; Store.set('dino_high', best); }
+              if(score>=200) (typeof Achievements!=='undefined'&&Achievements.unlock('dino_score_200'));
+              if(score>=1000) (typeof Achievements!=='undefined'&&Achievements.unlock('dino_score_1000'));
             }
           }
         }

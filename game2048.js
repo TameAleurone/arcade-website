@@ -48,6 +48,8 @@
       board = result;
       addRandom();
       if(score>best){ best=score; Store.set('2048_best_'+size, best); }
+      if(won) (typeof Achievements!=='undefined'&&Achievements.unlock('g2048_won'));
+      if(score>=10000) (typeof Achievements!=='undefined'&&Achievements.unlock('g2048_score_10000'));
       if(!canMove()) over=true;
     }
     if(moved) movesCount++;

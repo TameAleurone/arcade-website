@@ -89,6 +89,7 @@
       text = `JACKPOT! +${gained}${bonusSuffix()}`;
       multiplier=1; streak++;
       jackpotPot = JACKPOT_BASE;
+      (typeof Achievements!=='undefined'&&Achievements.unlock('wheel_jackpot'));
     } else if(seg.value==='x2'){
       multiplier=2; streak++;
       text = 'Spin X2! Your next prize will be doubled.';

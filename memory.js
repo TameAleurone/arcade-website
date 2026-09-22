@@ -74,6 +74,8 @@
     const best = Store.get(key, null);
     const isNew = best===null || moves<best;
     if(isNew) Store.set(key, moves);
+    (typeof Achievements!=='undefined'&&Achievements.unlock('memory_win_any'));
+    if(difficulty==='Easy (4x4)' && moves<=12) (typeof Achievements!=='undefined'&&Achievements.unlock('memory_sharp'));
     document.getElementById('mem-msg').textContent = `Solved in ${moves} moves, ${(elapsedMs/1000).toFixed(1)}s!` + (isNew?' New best!':'');
     updateHud();
   }
