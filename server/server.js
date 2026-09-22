@@ -36,6 +36,17 @@ const ACTION_LIMIT = 20; // host/join attempts per window, per connection or IP
 const JSONP_LONGPOLL_MS = 9000;
 const JSONP_KEEPALIVE_MS = 4000; // how often to write a harmless keep-alive chunk while a poll waits
 const JSONP_STALE_MS = 20000; // a jsonp peer that hasn't polled in this long is treated as gone
+// A GET request (the only kind <script src> can make, and the only kind
+// that's exempt from *both* connect-src and form-action) has a practical
+// URL-length ceiling — browsers, some proxies, and Node's own request-line
+// limit all cap it well below MAX_MESSAGE. A game's chess state can outgrow
+// a single request as its move history and position-repetition counts pile
+// up, so a large /jsonp/send is split client-side into several small
+// GET requests sharing one msgId and reassembled here by chunk index
+// (order doesn't matter — concurrent requests can arrive in any order).
+const JSONP_SEND_CHUNK_TTL_MS = 30000; // discard an abandoned partial send after this long
+const MAX_SEND_CHUNKS = 400; // generous headroom over MAX_MESSAGE at the client's chunk size
+const pendingSends = new Map(); // `${room}:${role}:${msgId}` -> {parts:Map<index,string>, total, createdAt}
 const rooms = new Map();
 
 function roomCode(){
@@ -156,10 +167,14 @@ function readRequestBody(req, maxBytes=MAX_MESSAGE+8192){
 
 function handleJsonp(req, res, pathname, params){
   const cb = params.get('callback')||'';
-  // GET JSONP needs a callback. POST /jsonp/send is intentionally callback-free:
-  // the client uses a normal HTML form submission so the chess state is in the
-  // request body instead of the URL. This avoids proxy/browser URL-length limits
-  // that are reached as the state.history and positionCounts arrays grow.
+  // GET JSONP needs a callback. POST /jsonp/send is legacy/callback-free (an
+  // older client sent large payloads as a form-POST body, sidestepping
+  // URL-length limits); the current client instead splits a large payload
+  // into several small chunked GETs (see the /jsonp/send GET handling
+  // below), since a cross-origin form POST turned out to be blocked by the
+  // same restrictive hosts (Neocities free tier) that connect-src already
+  // forces onto the WebSocket/JSONP fallback split in the first place. The
+  // POST path is kept here only in case anything still relies on it.
   if(req.method!=='POST' && !CALLBACK_RE.test(cb)){
     res.writeHead(400,{'Content-Type':'text/plain'}); return res.end('Invalid or missing callback.');
   }
@@ -260,6 +275,34 @@ function handleJsonp(req, res, pathname, params){
       return;
     }
 
+    // GET requests (the <script src> transport, immune to both connect-src
+    // and form-action) can arrive as one complete message, or — for a
+    // payload too big for one safe URL — as one numbered chunk of several.
+    // Chunked requests carry msgId/chunk/chunks; reassemble by chunk index
+    // (arrival order isn't guaranteed, since these are separate concurrent
+    // requests) and only process once every part of that msgId is in.
+    const msgId = params.get('msgId');
+    const chunkIdx = params.get('chunk');
+    const chunkTotal = params.get('chunks');
+    if(msgId && chunkIdx!==null && chunkTotal!==null){
+      const total = parseInt(chunkTotal,10);
+      const idx = parseInt(chunkIdx,10);
+      if(!Number.isInteger(total) || total<1 || total>MAX_SEND_CHUNKS || !Number.isInteger(idx) || idx<0 || idx>=total){
+        return respondJsonp(res,cb,{type:'error',message:'Invalid chunk.'});
+      }
+      const key = `${code}:${role}:${msgId}`;
+      let entry = pendingSends.get(key);
+      if(!entry){ entry={parts:new Map(), total, createdAt:Date.now()}; pendingSends.set(key, entry); }
+      entry.parts.set(idx, params.get('payload')||'');
+      if(entry.parts.size < entry.total){
+        return respondJsonp(res,cb,{type:'chunk-ack'}); // still waiting on the rest
+      }
+      pendingSends.delete(key);
+      let assembled='';
+      for(let i=0;i<entry.total;i++) assembled += entry.parts.get(i) || '';
+      return processSend(assembled);
+    }
+
     return processSend(params.get('payload')||'');
   }
 
@@ -301,6 +344,11 @@ setInterval(()=>{
   for(const room of rooms.values()){
     if(room.host && room.host.kind==='jsonp' && now-room.host.lastSeen>JSONP_STALE_MS) leaveRoomPeer(room, room.host);
     if(room.guest && room.guest.kind==='jsonp' && now-room.guest.lastSeen>JSONP_STALE_MS) leaveRoomPeer(room, room.guest);
+  }
+  // A chunked /jsonp/send that never got all its parts (one GET among
+  // several dropped) would otherwise sit here forever.
+  for(const [key,entry] of pendingSends){
+    if(now-entry.createdAt>JSONP_SEND_CHUNK_TTL_MS) pendingSends.delete(key);
   }
 }, 15000);
 
