@@ -10,10 +10,15 @@
    WebSocket attempt fails this module falls back automatically to a
    JSONP long-poll transport (data delivered as the body of a
    <script src="..."> tag, which isn't subject to connect-src at all —
-   the standard workaround for this exact restriction). Once one
-   transport has worked in this page's lifetime it's tried first on
-   later host()/join() calls, so a "New Game" doesn't re-probe WebSocket
-   every time on a host that's never going to allow it.
+   the standard workaround for this exact restriction). Every JSONP
+   request — including sending a move, not just host/join/poll — uses this
+   same <script src> GET technique; an earlier version sent outbound
+   messages via a cross-origin HTML form POST instead, which turned out to
+   be blocked too, since those same restrictive hosts also send
+   `form-action 'self'`. Once one transport has worked in this page's
+   lifetime it's tried first on later host()/join() calls, so a "New Game"
+   doesn't re-probe WebSocket every time on a host that's never going to
+   allow it.
 
    Auto-reconnect: if the connection drops unexpectedly (phone lost
    signal, the tab was backgrounded and the OS killed the connection,
@@ -224,32 +229,34 @@
     loopOnce();
   }
 
-  // JSONP GET requests put the entire payload in the URL. That worked for
-  // short messages but the full chess state grows as history/positionCounts
-  // grow, and proxies/browser URL limits can start rejecting it around the
-  // middle of a game. Use a cross-origin HTML form POST instead: forms are
-  // allowed by browsers even when connect-src blocks fetch/WebSocket, and the
-  // state travels in the request body with no URL-length limit. We don't need
-  // to read the POST response because the server immediately forwards the
-  // message to the other player.
+  // A <script src="..."> GET request is exempt from connect-src (like the
+  // rest of the JSONP transport) *and*, unlike our old cross-origin HTML
+  // form POST, from form-action too — some hosts (Neocities' free tier,
+  // notably) block that directive as well, which silently broke every
+  // outbound message while host()/join() kept right on "succeeding" (those
+  // still use plain GETs). A GET's URL has a length ceiling, though, and the
+  // full chess state can outgrow one request as history/positionCounts pile
+  // up over a game. So a message too big for a single safe URL is split
+  // into small chunks, each sent as its own concurrent GET tagged with a
+  // shared msgId; the server reassembles them by chunk index regardless of
+  // arrival order (see /jsonp/send's GET handling in server.js).
+  const JSONP_SEND_CHUNK_SIZE = 700; // raw characters per chunk, before URL-encoding
   function sendRawJsonp(payload){
-    const frame=document.createElement('iframe');
-    frame.name='__arcadeSend_'+Date.now()+'_'+Math.random().toString(36).slice(2);
-    frame.style.display='none';
-    document.body.appendChild(frame);
-    const form=document.createElement('form');
-    form.method='POST';
-    form.action=httpBaseUrl()+'/jsonp/send?room='+encodeURIComponent(room)+'&role='+encodeURIComponent(role)+'&token='+encodeURIComponent(myToken);
-    form.target=frame.name;
-    form.style.display='none';
-    const input=document.createElement('input');
-    input.type='hidden';
-    input.name='payload';
-    input.value=JSON.stringify(payload);
-    form.appendChild(input);
-    document.body.appendChild(form);
-    try{ form.submit(); }catch(_){ }
-    setTimeout(()=>{ try{form.remove(); frame.remove();}catch(_){} },15000);
+    const raw = JSON.stringify(payload);
+    const msgId = Date.now().toString(36)+Math.random().toString(36).slice(2);
+    const chunks = [];
+    for(let i=0; i<raw.length; i+=JSONP_SEND_CHUNK_SIZE) chunks.push(raw.slice(i, i+JSONP_SEND_CHUNK_SIZE));
+    if(!chunks.length) chunks.push(''); // JSON.stringify of a real payload is never actually empty, but stay safe
+    const total = chunks.length;
+    chunks.forEach((chunk, i)=>{
+      jsonpScriptCall('send', {room, role, token:myToken, msgId, chunk:i, chunks:total, payload:chunk}, JSONP_CALL_TIMEOUT_MS)
+        // Fire-and-forget, same as the form POST this replaces: a lost
+        // chunk means this whole message is lost, which the existing
+        // sync-recovery paths (requestSync, the guest watchdog, periodic
+        // full-state resends) already handle by asking the host to resend
+        // its latest state rather than needing this call to retry itself.
+        .catch(()=>{});
+    });
   }
 
   // ---- Transport-agnostic public API ---------------------------------
