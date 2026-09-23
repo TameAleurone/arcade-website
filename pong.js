@@ -31,11 +31,12 @@
     }
   }
   function startMatch(m,d){mode=m;difficulty=d||'Hard';document.getElementById('pong-setup').style.display='none';document.getElementById('pong-play').style.display='block';newMatch();setupTouchControls();updateHint();if(!animId)animId=requestAnimationFrame(loop);}
-  function onlineHost(){online=true;status('Creating room…');ArcadeOnline.host({onConnect:()=>{status('Opponent connected! You are Player 1.');startMatch('online');},onMessage:m=>{if(m.type==='input'&&ArcadeOnline.isHost())remoteKeys=m.keys||{};},onClose:()=>status('Opponent disconnected.'),onReconnecting:()=>status('Connection dropped — reconnecting…'),onReconnected:()=>status('Reconnected.')}).then(code=>{online=true;mySide='p1';document.getElementById('pong-room').textContent=code;document.getElementById('pong-online-game').style.display='block';status('Share this room code. Waiting for Player 2…');}).catch(e=>{console.error('[Pong online host]',e);status(e&&e.message?e.message:'Could not create room.');});}
+  function onlineHost(){const hostBtn=document.getElementById('pong-host');if(hostBtn)hostBtn.disabled=true;online=true;status('Creating room…');ArcadeOnline.host({onConnect:()=>{status('Opponent connected! You are Player 1.');startMatch('online');},onMessage:m=>{if(m.type==='input'&&ArcadeOnline.isHost())remoteKeys=m.keys||{};},onClose:()=>status('Opponent disconnected.'),onReconnecting:()=>status('Connection dropped — reconnecting…'),onReconnected:()=>status('Reconnected.')}).then(code=>{online=true;mySide='p1';document.getElementById('pong-room').textContent=code;document.getElementById('pong-online-game').style.display='block';status('Share this room code. Waiting for Player 2…');}).catch(e=>{console.error('[Pong online host]',e);status(e&&e.message?e.message:'Could not create room.');if(hostBtn)hostBtn.disabled=false;});}
   async function onlineJoin(){
     online=true;
     const code=document.getElementById('pong-room-input').value.trim();
     if(!code)return status('Enter a room code first.');
+    const joinBtn=document.getElementById('pong-join'); if(joinBtn) joinBtn.disabled=true;
     document.getElementById('pong-room').textContent=code;
     status('Joining room…');
     try{
@@ -70,6 +71,7 @@
     }catch(e){
       console.error('[Pong online join]',e);
       status(e&&e.message?e.message:'Could not join that room. Check the code.');
+      if(joinBtn) joinBtn.disabled=false;
     }
   }
   function setupTouchControls(){const host=document.getElementById('pong-touch');if(!host)return;host.innerHTML='';if(!window.TouchControls||!TouchControls.isTouchDevice())return;if(mode==='online'){const up=mySide==='p1'?'w':'ArrowUp',down=mySide==='p1'?'s':'ArrowDown';TouchControls.buttons(host,[{label:'▲',key:up,hold:true},{label:'▼',key:down,hold:true}]);}else if(mode==='2p'){TouchControls.buttons(host,[{label:'P1 ▲',key:'w',hold:true},{label:'P1 ▼',key:'s',hold:true},{label:'P2 ▲',key:'ArrowUp',hold:true},{label:'P2 ▼',key:'ArrowDown',hold:true}]);}else{TouchControls.buttons(host,[{label:'▲',key:'w',hold:true},{label:'▼',key:'s',hold:true}]);}}

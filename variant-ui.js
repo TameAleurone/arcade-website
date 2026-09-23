@@ -84,6 +84,16 @@ function createChessVariant(variant, displayName){
     container.querySelector('#chess-play-area').style.display='block';
   }
   async function onlineHost(){
+    // host()/join() are both async (a network round-trip), and the button
+    // that triggers them had no guard against firing twice — a fast
+    // double-click, or a double-tap (touch devices routinely register two
+    // taps close together), could fire this before the first call resolves
+    // and race two concurrent 'host' requests against the server. Disabling
+    // the button for the duration closes that window; it's re-enabled on
+    // failure so the user can retry, and stays disabled on success since
+    // the room-code panel replaces this button's purpose anyway.
+    const hostBtn = container.querySelector('#chess-online-host');
+    if(hostBtn) hostBtn.disabled = true;
     onlineRole='host'; myColor='w';
     container.querySelector('#chess-online-room').style.display='block';
     onlineStatus('Creating room…');
@@ -117,11 +127,14 @@ function createChessVariant(variant, displayName){
       onlineStatus('Share this room code with your friend. Waiting…');
     }catch(e){
       onlineRole=null; onlineStatus(e && e.message ? e.message : 'Could not create room. Try again.'); console.error(e);
+      if(hostBtn) hostBtn.disabled = false;
     }
   }
   async function onlineJoin(){
     const code = container.querySelector('#chess-room-input').value.trim();
     if(!code) return onlineStatus('Enter a room code first.');
+    const joinBtn = container.querySelector('#chess-online-join'); // see onlineHost's comment on why this guard exists
+    if(joinBtn) joinBtn.disabled = true;
     onlineRole='guest'; myColor='b'; mode='online';
     container.querySelector('#chess-online-room').style.display='block';
     container.querySelector('#chess-room-code').textContent = code;
@@ -150,6 +163,7 @@ function createChessVariant(variant, displayName){
       startOnlineSyncWatchdog();
     }catch(e){
       onlineRole=null; onlineStatus(e && e.message ? e.message : 'Could not join that room. Check the code.'); console.error(e);
+      if(joinBtn) joinBtn.disabled = false;
     }
   }
   function onHostMessage(m){
