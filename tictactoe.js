@@ -14,7 +14,7 @@
   function applyMove(i,fromNetwork=false){
     if(over||board[i])return false;
     board[i]=turn; const w=checkWinner();
-    if(w){over=true; if(w!=='draw') (typeof Achievements!=='undefined'&&Achievements.unlock('tictactoe_win'));} else turn=turn==='X'?'O':'X';
+    if(w)over=true; else turn=turn==='X'?'O':'X';
     render(); return true;
   }
   function play(i){
@@ -32,7 +32,6 @@
   function disconnect(){if(online)ArcadeOnline.close();online=null;myMark=null;status('Online room closed.');render();document.getElementById('ttt-setup').style.display='block';document.getElementById('ttt-online-game').style.display='none';}
   function showOnlineGame(){document.getElementById('ttt-setup').style.display='none';document.getElementById('ttt-online-game').style.display='block';}
   async function host(){
-    const hostBtn=document.getElementById('ttt-host'); if(hostBtn) hostBtn.disabled=true;
     online=true;
     showOnlineGame(); myMark='X'; status('Creating room…');
     try{
@@ -53,13 +52,11 @@
       online=null;
       status(e && e.message ? e.message : 'Could not create room. Try again.');
       console.error(e);
-      if(hostBtn) hostBtn.disabled=false;
     }
   }
   async function join(){
     const code=document.getElementById('ttt-room-input').value.trim();
     if(!code)return status('Enter a room code first.');
-    const joinBtn=document.getElementById('ttt-join'); if(joinBtn) joinBtn.disabled=true;
     online=true;
     showOnlineGame(); myMark='O';
     document.getElementById('ttt-room').textContent=code;
@@ -81,7 +78,6 @@
       online=null;
       status(e && e.message ? e.message : 'Could not join that room. Check the code.');
       console.error(e);
-      if(joinBtn) joinBtn.disabled=false;
     }
   }
   function destroy(){if(online)ArcadeOnline.close();}

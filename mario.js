@@ -130,7 +130,6 @@
     if(lives<=0){
       state='dead';
       if(score>best){ best=score; Store.set('mario_high', best); }
-      if(score>=500) (typeof Achievements!=='undefined'&&Achievements.unlock('mario_score_500'));
     } else {
       resetPlayer();
       camera = Math.max(0, player.x-100);
@@ -217,8 +216,6 @@
       } else {
         state='win';
         if(score>best){ best=score; Store.set('mario_high', best); }
-        if(score>=500) (typeof Achievements!=='undefined'&&Achievements.unlock('mario_score_500'));
-        (typeof Achievements!=='undefined'&&Achievements.unlock('mario_level_clear'));
       }
     }
     camera = Math.max(0, Math.min(levelWidth-VIEW_W, player.x-VIEW_W/2));

@@ -115,8 +115,6 @@
   }
   function finishRun(){
     if(score>best){ best=score; Store.set('flyer_high', best); }
-    if(score>=10) (typeof Achievements!=='undefined'&&Achievements.unlock('flyer_score_10'));
-    if(score>=25) (typeof Achievements!=='undefined'&&Achievements.unlock('flyer_score_25'));
   }
   function draw(){
     // sky gradient

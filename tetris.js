@@ -110,8 +110,6 @@
     if(collides(cur.blocks)){
       over = true;
       if(score>best){ best=score; Store.set('tetris_high', Math.round(best)); }
-      if(lines>=10) (typeof Achievements!=='undefined'&&Achievements.unlock('tetris_lines_10'));
-      if(lines>=40) (typeof Achievements!=='undefined'&&Achievements.unlock('tetris_lines_40'));
     }
   }
   function hardDrop(){
@@ -219,14 +217,6 @@
     draw();
     animId = requestAnimationFrame(loop);
   }
-  function newGame(){
-    grid = emptyGrid(); bag=[]; queue=[]; holdType=null; holdUsed=false;
-    score=0; lines=0; level=1; over=false; paused=false;
-    dropTimer=0; dropInterval=700; lockTimer=0; isLocking=false; lastTs=null;
-    comboCount=-1; comboFlashTimer=0; comboFlashText=''; backToBack=0; perfectClears=0;
-    refillQueue();
-    cur = spawnFromQueue();
-  }
   function keydown(e){
     if(over) return;
     if(e.key==='p' || e.key==='P'){ paused=!paused; e.preventDefault(); return; }
@@ -237,10 +227,16 @@
     else if(e.key==='ArrowUp'){ tryRotate(); e.preventDefault(); }
     else if(e.key===' '){ hardDrop(); e.preventDefault(); }
     else if(e.key==='c' || e.key==='C' || e.key==='Shift'){ holdPiece(); e.preventDefault(); }
-    else if(e.key==='r' || e.key==='R'){ newgame; e.preventDefault(); }
   }
   function keyup(e){ if(e.key==='ArrowDown') keys['ArrowDown']=false; }
-  
+  function newGame(){
+    grid = emptyGrid(); bag=[]; queue=[]; holdType=null; holdUsed=false;
+    score=0; lines=0; level=1; over=false; paused=false;
+    dropTimer=0; dropInterval=700; lockTimer=0; isLocking=false; lastTs=null;
+    comboCount=-1; comboFlashTimer=0; comboFlashText=''; backToBack=0; perfectClears=0;
+    refillQueue();
+    cur = spawnFromQueue();
+  }
   function init(c){
     container=c; best = Store.get('tetris_high',0);
     container.innerHTML = `
