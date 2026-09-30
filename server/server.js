@@ -36,6 +36,17 @@ const ACTION_LIMIT = 20; // host/join attempts per window, per connection or IP
 const JSONP_LONGPOLL_MS = 9000;
 const JSONP_KEEPALIVE_MS = 4000; // how often to write a harmless keep-alive chunk while a poll waits
 const JSONP_STALE_MS = 20000; // a jsonp peer that hasn't polled in this long is treated as gone
+// A GET request (the only kind <script src> can make, and the only kind
+// that's exempt from *both* connect-src and form-action) has a practical
+// URL-length ceiling — browsers, some proxies, and Node's own request-line
+// limit all cap it well below MAX_MESSAGE. A game's chess state can outgrow
+// a single request as its move history and position-repetition counts pile
+// up, so a large /jsonp/send is split client-side into several small
+// GET requests sharing one msgId and reassembled here by chunk index
+// (order doesn't matter — concurrent requests can arrive in any order).
+const JSONP_SEND_CHUNK_TTL_MS = 30000; // discard an abandoned partial send after this long
+const MAX_SEND_CHUNKS = 400; // generous headroom over MAX_MESSAGE at the client's chunk size
+const pendingSends = new Map(); // `${room}:${role}:${msgId}` -> {parts:Map<index,string>, total, createdAt}
 const rooms = new Map();
 
 function roomCode(){
@@ -94,6 +105,19 @@ function peerSend(peer, msg){
   if(peer.queue.length>200) peer.queue.shift(); // drop oldest if a peer stops polling but isn't stale yet
 }
 
+// Keep the newest authoritative chess state in the room as well as forwarding
+// it to the other player. This makes a state packet recoverable if a browser,
+// proxy, or JSONP request drops that particular response.
+function rememberRoomState(room, payload){
+  if(!room || !payload || payload.type!=='state') return;
+  room.latestState=payload;
+}
+
+function sendLatestRoomState(room, peer){
+  if(!room || !peer || !room.latestState) return;
+  peerSend(peer,{type:'message',payload:room.latestState});
+}
+
 function leaveRoomPeer(room, peer){
   if(!room || !peer) return;
   if(room.host===peer) room.host=null;
@@ -128,9 +152,32 @@ setInterval(()=>{
   }
 }, 60000);
 
+function readRequestBody(req, maxBytes=MAX_MESSAGE+8192){
+  return new Promise((resolve,reject)=>{
+    let size=0, chunks=[];
+    req.on('data',chunk=>{
+      size += chunk.length;
+      if(size>maxBytes){ reject(new Error('Request body too large.')); try{req.destroy();}catch(_){} return; }
+      chunks.push(chunk);
+    });
+    req.on('end',()=>resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error',reject);
+  });
+}
+
 function handleJsonp(req, res, pathname, params){
   const cb = params.get('callback')||'';
-  if(!CALLBACK_RE.test(cb)){ res.writeHead(400,{'Content-Type':'text/plain'}); return res.end('Invalid or missing callback.'); }
+  // GET JSONP needs a callback. POST /jsonp/send is legacy/callback-free (an
+  // older client sent large payloads as a form-POST body, sidestepping
+  // URL-length limits); the current client instead splits a large payload
+  // into several small chunked GETs (see the /jsonp/send GET handling
+  // below), since a cross-origin form POST turned out to be blocked by the
+  // same restrictive hosts (Neocities free tier) that connect-src already
+  // forces onto the WebSocket/JSONP fallback split in the first place. The
+  // POST path is kept here only in case anything still relies on it.
+  if(req.method!=='POST' && !CALLBACK_RE.test(cb)){
+    res.writeHead(400,{'Content-Type':'text/plain'}); return res.end('Invalid or missing callback.');
+  }
 
   const ip = (req.socket && req.socket.remoteAddress) || 'unknown';
   const code = String(params.get('room')||'').toUpperCase();
@@ -143,7 +190,7 @@ function handleJsonp(req, res, pathname, params){
     const newCode=roomCode();
     const hostToken=makeToken();
     const peer={kind:'jsonp', token:hostToken, queue:[], lastSeen:Date.now(), waiter:null};
-    rooms.set(newCode,{code:newCode, host:peer, guest:null, hostToken});
+    rooms.set(newCode,{code:newCode, host:peer, guest:null, hostToken, latestState:null});
     return respondJsonp(res,cb,{type:'hosted',room:newCode,token:hostToken});
   }
 
@@ -156,6 +203,9 @@ function handleJsonp(req, res, pathname, params){
     const peer={kind:'jsonp', token:guestToken, queue:[], lastSeen:Date.now(), waiter:null};
     room.guest=peer;
     if(room.host) peerSend(room.host,{type:'peer-connected'});
+    // If this is a reconnect or a guest joining after the host already has
+    // an authoritative position, give the guest that position immediately.
+    sendLatestRoomState(room, peer);
     return respondJsonp(res,cb,{type:'joined',room:code,token:guestToken});
   }
 
@@ -168,6 +218,7 @@ function handleJsonp(req, res, pathname, params){
     const peer={kind:'jsonp', token, queue:[], lastSeen:Date.now(), waiter:null};
     room.host=peer;
     if(room.guest) peerSend(room.guest,{type:'peer-connected'});
+    // Reclaimed hosts keep the room's cached state; no game reset is needed.
     return respondJsonp(res,cb,{type:'hosted',room:code,token});
   }
 
@@ -182,14 +233,77 @@ function handleJsonp(req, res, pathname, params){
   if(!peer || peer.kind!=='jsonp' || peer.token!==token) return respondJsonp(res,cb,{type:'error',message:'Not authorized for that room.'});
 
   if(pathname==='/jsonp/send'){
-    const payloadRaw=params.get('payload')||'';
-    if(payloadRaw.length>MAX_MESSAGE) return respondJsonp(res,cb,{type:'error',message:'Message too large.'});
-    let payload;
-    try{ payload=JSON.parse(payloadRaw); }catch{ return respondJsonp(res,cb,{type:'error',message:'Invalid message.'}); }
-    peer.lastSeen=Date.now();
-    const other = role==='host' ? room.guest : room.host;
-    if(other) peerSend(other,{type:'message',payload});
-    return respondJsonp(res,cb,{type:'ack'});
+    const processSend = (payloadRaw)=>{
+      if(payloadRaw.length>MAX_MESSAGE) return req.method==='POST'
+        ? (res.writeHead(413,{'Content-Type':'text/plain'}), res.end('Message too large.'))
+        : respondJsonp(res,cb,{type:'error',message:'Message too large.'});
+      let payload;
+      try{ payload=JSON.parse(payloadRaw); }
+      catch{
+        return req.method==='POST'
+          ? (res.writeHead(400,{'Content-Type':'text/plain'}), res.end('Invalid message.'))
+          : respondJsonp(res,cb,{type:'error',message:'Invalid message.'});
+      }
+      peer.lastSeen=Date.now();
+
+      // A guest's sync request can be answered from the room cache directly.
+      // This is important because the original request could itself have been
+      // delivered while the corresponding state packet was lost.
+      if(role==='guest' && payload && payload.type==='requestSync'){
+        sendLatestRoomState(room, peer);
+        if(req.method==='POST') { res.writeHead(204); return res.end(); }
+        return respondJsonp(res,cb,{type:'ack'});
+      }
+
+      if(role==='host') rememberRoomState(room,payload);
+      const other = role==='host' ? room.guest : room.host;
+      if(other) peerSend(other,{type:'message',payload});
+      if(req.method==='POST') { res.writeHead(204); return res.end(); }
+      return respondJsonp(res,cb,{type:'ack'});
+    };
+
+    if(req.method==='POST'){
+      readRequestBody(req).then(raw=>{
+        let body;
+        try{ body=new URLSearchParams(raw); }
+        catch{ res.writeHead(400,{'Content-Type':'text/plain'}); return res.end('Invalid form body.'); }
+        processSend(body.get('payload')||'');
+      }).catch(err=>{
+        if(!res.headersSent) res.writeHead(413,{'Content-Type':'text/plain'});
+        if(!res.writableEnded) res.end(err.message||'Request body too large.');
+      });
+      return;
+    }
+
+    // GET requests (the <script src> transport, immune to both connect-src
+    // and form-action) can arrive as one complete message, or — for a
+    // payload too big for one safe URL — as one numbered chunk of several.
+    // Chunked requests carry msgId/chunk/chunks; reassemble by chunk index
+    // (arrival order isn't guaranteed, since these are separate concurrent
+    // requests) and only process once every part of that msgId is in.
+    const msgId = params.get('msgId');
+    const chunkIdx = params.get('chunk');
+    const chunkTotal = params.get('chunks');
+    if(msgId && chunkIdx!==null && chunkTotal!==null){
+      const total = parseInt(chunkTotal,10);
+      const idx = parseInt(chunkIdx,10);
+      if(!Number.isInteger(total) || total<1 || total>MAX_SEND_CHUNKS || !Number.isInteger(idx) || idx<0 || idx>=total){
+        return respondJsonp(res,cb,{type:'error',message:'Invalid chunk.'});
+      }
+      const key = `${code}:${role}:${msgId}`;
+      let entry = pendingSends.get(key);
+      if(!entry){ entry={parts:new Map(), total, createdAt:Date.now()}; pendingSends.set(key, entry); }
+      entry.parts.set(idx, params.get('payload')||'');
+      if(entry.parts.size < entry.total){
+        return respondJsonp(res,cb,{type:'chunk-ack'}); // still waiting on the rest
+      }
+      pendingSends.delete(key);
+      let assembled='';
+      for(let i=0;i<entry.total;i++) assembled += entry.parts.get(i) || '';
+      return processSend(assembled);
+    }
+
+    return processSend(params.get('payload')||'');
   }
 
   if(pathname==='/jsonp/poll'){
@@ -230,6 +344,11 @@ setInterval(()=>{
   for(const room of rooms.values()){
     if(room.host && room.host.kind==='jsonp' && now-room.host.lastSeen>JSONP_STALE_MS) leaveRoomPeer(room, room.host);
     if(room.guest && room.guest.kind==='jsonp' && now-room.guest.lastSeen>JSONP_STALE_MS) leaveRoomPeer(room, room.guest);
+  }
+  // A chunked /jsonp/send that never got all its parts (one GET among
+  // several dropped) would otherwise sit here forever.
+  for(const [key,entry] of pendingSends){
+    if(now-entry.createdAt>JSONP_SEND_CHUNK_TTL_MS) pendingSends.delete(key);
   }
 }, 15000);
 
@@ -303,7 +422,7 @@ wss.on('connection',(ws)=>{
       const code=roomCode();
       const token=makeToken();
       const peer={kind:'ws', ws};
-      rooms.set(code,{code, host:peer, guest:null, hostToken:token});
+      rooms.set(code,{code, host:peer, guest:null, hostToken:token, latestState:null});
       ws.roomCode=code; ws.role='host'; ws.peer=peer;
       return wsSend(ws,{type:'hosted',room:code,token});
     }
@@ -319,6 +438,7 @@ wss.on('connection',(ws)=>{
       room.guest=peer; ws.roomCode=code; ws.role='guest'; ws.peer=peer;
       wsSend(ws,{type:'joined',room:code});
       if(room.host) peerSend(room.host,{type:'peer-connected'});
+      sendLatestRoomState(room, peer);
       return;
     }
 
@@ -347,8 +467,18 @@ wss.on('connection',(ws)=>{
       if(!ws.roomCode) return wsFail(ws,'You are not in a room.');
       const room=rooms.get(ws.roomCode);
       if(!room) return wsFail(ws,'Room no longer exists.');
+      const payload=msg.payload;
+
+      // Answer a guest sync request from the cached authoritative state even
+      // if the host's original state packet was missed.
+      if(ws.peer===room.guest && payload && payload.type==='requestSync'){
+        sendLatestRoomState(room, ws.peer);
+        return;
+      }
+
+      if(ws.peer===room.host) rememberRoomState(room,payload);
       const other=ws.peer===room.host ? room.guest : room.host;
-      if(other) peerSend(other,{type:'message',payload:msg.payload});
+      if(other) peerSend(other,{type:'message',payload});
       return;
     }
 
