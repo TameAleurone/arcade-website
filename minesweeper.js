@@ -42,6 +42,8 @@
       const key = 'ms_best_'+difficulty;
       const best = Store.get(key, null);
       if(best===null || seconds<best) Store.set(key, seconds);
+      if(difficulty==='easy') (typeof Achievements!=='undefined'&&Achievements.unlock('ms_win_easy'));
+      if(difficulty==='hard') (typeof Achievements!=='undefined'&&Achievements.unlock('ms_win_hard'));
       renderMsg(`You win! ${seconds}s`);
     }
   }

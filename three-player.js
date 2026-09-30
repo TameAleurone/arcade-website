@@ -118,9 +118,33 @@
     return moves;
   }
 
+  // Same idea as the 2-player engine's positionKey()/positionCounts — a
+  // three-way game with no way to ever end other than a king capture could
+  // otherwise loop forever (shuffle two pieces back and forth, or just sit
+  // in a dead-drawn endgame with no mating material). board is a plain
+  // {"q,r":piece} object here rather than a 2D array, so this sorts its
+  // keys for a stable, order-independent serialization; turn and which
+  // seats are still active are included since a position with a different
+  // player to move, or with a player already eliminated, isn't really the
+  // same position for repetition purposes.
+  function positionKey3p(state){
+    const keys = Object.keys(state.board).sort();
+    const boardStr = keys.map(k=>k+':'+state.board[k]).join('|');
+    return `${boardStr}#${state.turn}#${state.active.join(',')}`;
+  }
+  function recordPositionAndCheckDraw(){
+    if(!state.positionCounts) state.positionCounts={};
+    const pkey = positionKey3p(state);
+    state.positionCounts[pkey] = (state.positionCounts[pkey]||0)+1;
+    if(state.positionCounts[pkey]>=3){ state.gameOver=true; state.winner=null; state.drawReason='Threefold repetition'; return true; }
+    if((state.halfmoveClock||0)>=100){ state.gameOver=true; state.winner=null; state.drawReason='50-move rule'; return true; }
+    return false;
+  }
+
   let state, lastMove=null, eliminationBanner=0, eliminationText='';
   function newGame(mode){
-    state = {board: setupBoard(), active:['0','1','2'], turn:'0', mode, gameOver:false, winner:null};
+    state = {board: setupBoard(), active:['0','1','2'], turn:'0', mode, gameOver:false, winner:null, halfmoveClock:0, positionCounts:{}, drawReason:null};
+    state.positionCounts[positionKey3p(state)] = 1; // the starting position itself is one occurrence
     selected=null; legalTargets=[]; handoverPending=(mode==='hotseat'); lastMove=null; eliminationBanner=0;
     render();
     maybeAI();
@@ -128,9 +152,11 @@
   function applyMove(mv){
     const board = state.board;
     const moverColor = mv.piece[0];
+    const resetsClock = !!mv.capture || mv.piece[1]==='P';
     delete board[key(mv.fq,mv.fr)];
     board[key(mv.tq,mv.tr)] = mv.promotion ? moverColor+(mv.promotion===true?'Q':mv.promotion) : mv.piece;
     lastMove = {fq:mv.fq, fr:mv.fr, tq:mv.tq, tr:mv.tr};
+    state.halfmoveClock = resetsClock ? 0 : (state.halfmoveClock||0)+1;
     if(mv.capture && mv.capturedPiece[1]==='K'){
       const eliminated = mv.capturedPiece[0];
       state.active = state.active.filter(p=>p!==eliminated);
@@ -141,13 +167,19 @@
     advanceTurn();
   }
   function advanceTurn(){
-    if(state.active.length<=1){ state.gameOver=true; state.winner=state.active[0]||null; return; }
+    if(state.active.length<=1){
+      state.gameOver=true; state.winner=state.active[0]||null;
+      const humanWon = state.winner!==null && (state.mode==='hotseat' || state.winner==='0');
+      if(humanWon) (typeof Achievements!=='undefined'&&Achievements.unlock('three_player_chess_win'));
+      return;
+    }
     let idx = ['0','1','2'].indexOf(state.turn);
     for(let i=0;i<3;i++){
       idx = (idx+1)%3;
       const cand = String(idx);
       if(state.active.includes(cand) && allLegalMoves(state.board,cand).length>0){
         state.turn = cand;
+        recordPositionAndCheckDraw();
         return;
       }
     }
@@ -271,7 +303,7 @@
     if(state.gameOver){
       msg.innerHTML = state.winner!==null
         ? `<span style="color:${TEAM_COLOR[state.winner]};font-weight:700;">${TEAM_NAME[state.winner]} wins!</span>`
-        : "It's a draw!";
+        : (state.drawReason ? `${state.drawReason} — draw` : "It's a draw!");
     } else if(eliminationBanner>0){
       msg.innerHTML = `<span style="color:#ff5050;font-weight:700;">${eliminationText}</span>`;
     } else {

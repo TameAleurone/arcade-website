@@ -187,6 +187,8 @@
       alive=false; comboFlash=0;
       const best = Store.get('snake_high', 0);
       if(score>best) Store.set('snake_high', score);
+      if(score>=10) (typeof Achievements!=='undefined'&&Achievements.unlock('snake_score_10'));
+      if(score>=30) (typeof Achievements!=='undefined'&&Achievements.unlock('snake_score_30'));
       return;
     }
     if(portals && portalCooldown<=0){

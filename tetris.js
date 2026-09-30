@@ -110,6 +110,8 @@
     if(collides(cur.blocks)){
       over = true;
       if(score>best){ best=score; Store.set('tetris_high', Math.round(best)); }
+      if(lines>=10) (typeof Achievements!=='undefined'&&Achievements.unlock('tetris_lines_10'));
+      if(lines>=40) (typeof Achievements!=='undefined'&&Achievements.unlock('tetris_lines_40'));
     }
   }
   function hardDrop(){

@@ -170,6 +170,8 @@
         if(lives<=0){
           gameOver=true;
           if(score>best){ best=score; Store.set('breakout_high', best); }
+          if(score>=500) (typeof Achievements!=='undefined'&&Achievements.unlock('breakout_score_500'));
+          if(score>=2000) (typeof Achievements!=='undefined'&&Achievements.unlock('breakout_score_2000'));
         } else {
           balls=[resetBallOnPaddle()];
         }

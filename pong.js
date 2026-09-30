@@ -6,7 +6,7 @@
   function netState(){return {p1y:p1.y,p2y:p2.y,ball:{...ball},score1,score2,winner,serveTimer};}
   function newMatch(){p1={x:14,y:H/2-PADDLE_H/2,w:10,h:PADDLE_H};p2={x:W-24,y:H/2-PADDLE_H/2,w:10,h:PADDLE_H};score1=0;score2=0;winner=null;aiReactionTimer=0;aiTargetY=p2.y;serve(Math.random()<0.5?-1:1);}
   function serve(dir){ball={x:W/2,y:H/2,r:7,vx:dir*BALL_SPEED_START,vy:(Math.random()*2-1)*140};serveTimer=600;}
-  function endMatch(win){winner=win;record[win]++;Store.set('pong_record',record);}
+  function endMatch(win){winner=win;record[win]++;Store.set('pong_record',record);(typeof Achievements!=='undefined'&&Achievements.unlock('pong_win'));}
   function updateAI(dt){aiReactionTimer-=dt;if(aiReactionTimer<=0){aiReactionTimer=AI_REACTION[difficulty];aiTargetY=ball.vx>0?ball.y-PADDLE_H/2:H/2-PADDLE_H/2;}const speed=AI_SPEED[difficulty];if(p2.y<aiTargetY)p2.y=Math.min(aiTargetY,p2.y+speed*dt/1000);else if(p2.y>aiTargetY)p2.y=Math.max(aiTargetY,p2.y-speed*dt/1000);p2.y=Math.max(0,Math.min(H-PADDLE_H,p2.y));}
   function simulate(dt){if(keys.w)p1.y-=PADDLE_SPEED*dt/1000;if(keys.s)p1.y+=PADDLE_SPEED*dt/1000;p1.y=Math.max(0,Math.min(H-PADDLE_H,p1.y));if(mode==='online'){if(remoteKeys.up)p2.y-=PADDLE_SPEED*dt/1000;if(remoteKeys.down)p2.y+=PADDLE_SPEED*dt/1000;p2.y=Math.max(0,Math.min(H-PADDLE_H,p2.y));}else if(mode==='2p'){if(keys.ArrowUp)p2.y-=PADDLE_SPEED*dt/1000;if(keys.ArrowDown)p2.y+=PADDLE_SPEED*dt/1000;p2.y=Math.max(0,Math.min(H-PADDLE_H,p2.y));}else if(!winner)updateAI(dt);
     if(!winner){if(serveTimer>0)serveTimer-=dt;else{ball.x+=ball.vx*dt/1000;ball.y+=ball.vy*dt/1000;if(ball.y-ball.r<0){ball.y=ball.r;ball.vy*=-1;}if(ball.y+ball.r>H){ball.y=H-ball.r;ball.vy*=-1;}if(ball.vx<0&&ball.x-ball.r<p1.x+p1.w&&ball.y>p1.y&&ball.y<p1.y+p1.h){const speed=Math.min(BALL_SPEED_MAX,Math.hypot(ball.vx,ball.vy)+BALL_SPEED_STEP),rel=(ball.y-(p1.y+p1.h/2))/(p1.h/2);ball.vx=Math.abs(Math.cos(rel*.6))*speed;ball.vy=Math.sin(rel*.6)*speed;ball.x=p1.x+p1.w+ball.r;}if(ball.vx>0&&ball.x+ball.r>p2.x&&ball.y>p2.y&&ball.y<p2.y+p2.h){const speed=Math.min(BALL_SPEED_MAX,Math.hypot(ball.vx,ball.vy)+BALL_SPEED_STEP),rel=(ball.y-(p2.y+p2.h/2))/(p2.h/2);ball.vx=-Math.abs(Math.cos(rel*.6))*speed;ball.vy=Math.sin(rel*.6)*speed;ball.x=p2.x-ball.r;}if(ball.x<0){score2++;if(score2>=WIN_SCORE)endMatch('p2');else serve(1);}if(ball.x>W){score1++;if(score1>=WIN_SCORE)endMatch('p1');else serve(-1);}}}
@@ -31,11 +31,12 @@
     }
   }
   function startMatch(m,d){mode=m;difficulty=d||'Hard';document.getElementById('pong-setup').style.display='none';document.getElementById('pong-play').style.display='block';newMatch();setupTouchControls();updateHint();if(!animId)animId=requestAnimationFrame(loop);}
-  function onlineHost(){online=true;status('Creating room…');ArcadeOnline.host({onConnect:()=>{status('Opponent connected! You are Player 1.');startMatch('online');},onMessage:m=>{if(m.type==='input'&&ArcadeOnline.isHost())remoteKeys=m.keys||{};},onClose:()=>status('Opponent disconnected.'),onReconnecting:()=>status('Connection dropped — reconnecting…'),onReconnected:()=>status('Reconnected.')}).then(code=>{online=true;mySide='p1';document.getElementById('pong-room').textContent=code;document.getElementById('pong-online-game').style.display='block';status('Share this room code. Waiting for Player 2…');}).catch(e=>{console.error('[Pong online host]',e);status(e&&e.message?e.message:'Could not create room.');});}
+  function onlineHost(){const hostBtn=document.getElementById('pong-host');if(hostBtn)hostBtn.disabled=true;online=true;status('Creating room…');ArcadeOnline.host({onConnect:()=>{status('Opponent connected! You are Player 1.');startMatch('online');},onMessage:m=>{if(m.type==='input'&&ArcadeOnline.isHost())remoteKeys=m.keys||{};},onClose:()=>status('Opponent disconnected.'),onReconnecting:()=>status('Connection dropped — reconnecting…'),onReconnected:()=>status('Reconnected.')}).then(code=>{online=true;mySide='p1';document.getElementById('pong-room').textContent=code;document.getElementById('pong-online-game').style.display='block';status('Share this room code. Waiting for Player 2…');}).catch(e=>{console.error('[Pong online host]',e);status(e&&e.message?e.message:'Could not create room.');if(hostBtn)hostBtn.disabled=false;});}
   async function onlineJoin(){
     online=true;
     const code=document.getElementById('pong-room-input').value.trim();
     if(!code)return status('Enter a room code first.');
+    const joinBtn=document.getElementById('pong-join'); if(joinBtn) joinBtn.disabled=true;
     document.getElementById('pong-room').textContent=code;
     status('Joining room…');
     try{
@@ -70,6 +71,7 @@
     }catch(e){
       console.error('[Pong online join]',e);
       status(e&&e.message?e.message:'Could not join that room. Check the code.');
+      if(joinBtn) joinBtn.disabled=false;
     }
   }
   function setupTouchControls(){const host=document.getElementById('pong-touch');if(!host)return;host.innerHTML='';if(!window.TouchControls||!TouchControls.isTouchDevice())return;if(mode==='online'){const up=mySide==='p1'?'w':'ArrowUp',down=mySide==='p1'?'s':'ArrowDown';TouchControls.buttons(host,[{label:'▲',key:up,hold:true},{label:'▼',key:down,hold:true}]);}else if(mode==='2p'){TouchControls.buttons(host,[{label:'P1 ▲',key:'w',hold:true},{label:'P1 ▼',key:'s',hold:true},{label:'P2 ▲',key:'ArrowUp',hold:true},{label:'P2 ▼',key:'ArrowDown',hold:true}]);}else{TouchControls.buttons(host,[{label:'▲',key:'w',hold:true},{label:'▼',key:'s',hold:true}]);}}

@@ -307,6 +307,15 @@ const ChessEngine = (function(){
       if(pieceCount===0) return {over:true, result:`${color==='w'?'White':'Black'} wins — no pieces left!`};
       const moves = allLegalMoves(state, color);
       if(moves.length===0) return {over:true, result:`${color==='w'?'White':'Black'} wins — no legal moves!`};
+      // state.positionCounts/halfmoveClock are already maintained by
+      // applyMoveRaw() for every variant, unconditionally — this and the
+      // dice/drawback branch below just never checked them, so a repeated
+      // or shuffling-pieces-forever antichess/dice/drawback game had no way
+      // to ever end in a draw, only by someone actually running out of
+      // pieces or legal moves.
+      seedPositionCounts(state);
+      if((state.positionCounts[positionKey(state)]||0)>=3) return {over:true, result:'Threefold repetition — draw'};
+      if((state.halfmoveClock||0)>=100) return {over:true, result:'50-move rule — draw'};
       return {over:false, moves};
     }
     if(state.variant==='dice_chess' || state.variant==='drawback_chess'){
@@ -321,6 +330,9 @@ const ChessEngine = (function(){
       // the same way antichess does above rather than leaving the game
       // stuck with no result.
       if(moves.length===0) return {over:true, result:`${oppo==='w'?'White':'Black'} wins — ${color==='w'?'White':'Black'} has no legal moves!`};
+      seedPositionCounts(state);
+      if((state.positionCounts[positionKey(state)]||0)>=3) return {over:true, result:'Threefold repetition — draw'};
+      if((state.halfmoveClock||0)>=100) return {over:true, result:'50-move rule — draw'};
       return {over:false, moves};
     }
     const moves = allLegalMoves(state, color);

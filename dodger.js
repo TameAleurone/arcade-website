@@ -119,6 +119,8 @@
           if(lives<=0){
             gameOver=true;
             if(score>best){ best=score; Store.set('dodger_high', best); }
+            if(score>=100) (typeof Achievements!=='undefined'&&Achievements.unlock('dodger_score_100'));
+            if(score>=300) (typeof Achievements!=='undefined'&&Achievements.unlock('dodger_score_300'));
           }
           return false;
         }

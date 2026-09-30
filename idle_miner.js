@@ -91,6 +91,8 @@
     lastTs = now;
     const gained = goldPerSec()*dt;
     gold += gained; lifetimeGold += gained;
+    if(lifetimeGold>=10000) (typeof Achievements!=='undefined'&&Achievements.unlock('idle_miner_10000'));
+    if(lifetimeGold>=1000000) (typeof Achievements!=='undefined'&&Achievements.unlock('idle_miner_1000000'));
     render();
   }
   function key(e){ if(e.key===' '){ doDig(); e.preventDefault(); } }

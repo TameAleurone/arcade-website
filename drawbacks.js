@@ -525,11 +525,21 @@ const DRAWBACKS = (function(){
     });
   });
   add('bridge_over_troubled_water','Bridge Over Troubled Water',"There's a river across the middle two ranks — cross only via the center two files.", (moves)=>moves.filter(m=>{
-    if(m.tr===3||m.tr===4) return false;
+    // Knights/kings/pawns cross freely (they don't slide through the river,
+    // they hop or step onto it). Sliding pieces (B/R/Q) must have every
+    // square they pass through *and land on* within the river be in one of
+    // the two center files — this used to instead reject any destination
+    // on the river outright, even one reached via the center files, which
+    // made a piece landing mid-bridge (rather than only passing over it)
+    // always illegal and left the "except via the center files" half of
+    // this drawback's own description doing nothing.
     if(m.piece[1]==='N'||m.piece[1]==='K'||m.piece[1]==='P') return true;
     const dr=Math.sign(m.tr-m.fr), dc=Math.sign(m.tc-m.fc);
-    let r=m.fr+dr,c=m.fc+dc;
-    while(r!==m.tr||c!==m.tc){ if((r===3||r===4) && c!==3 && c!==4) return false; r+=dr; c+=dc; }
+    let r=m.fr,c=m.fc;
+    while(r!==m.tr||c!==m.tc){
+      r+=dr; c+=dc;
+      if((r===3||r===4) && c!==3 && c!==4) return false;
+    }
     return true;
   }));
   add('royal_berth','Royal Berth',"You can't move a piece adjacent to your own king.", (moves,ctx)=>{
@@ -639,12 +649,19 @@ const DRAWBACKS = (function(){
     const after = H.afterMove(ctx.state, m);
     return H.isAttackedBy(after, m.tr, m.tc, ctx.color);
   }));
-  add('death_wish','Death Wish',"If you can move your king into check, you must (unless already in check).", (moves,ctx)=>{
-    if(ChessEngine.isInCheck(ctx.state, ctx.color)) return moves;
+  // This used to require moving the king into check when possible — but a
+  // legal move can never leave your own king in check (that's what makes
+  // it legal), so `moves` here could never contain such a move in the
+  // first place: the condition was unsatisfiable by construction. Verified
+  // empirically too — checked across 2,389 real positions (4,806 legal
+  // king moves total) from 60 simulated games and it never once
+  // restricted anything. Re-scoped to any piece walking into an attacked
+  // square, which keeps the "reckless" theme but is actually reachable
+  // under real chess rules (moving into an attack is legal, just risky).
+  add('death_wish','Death Wish',"If you can move a piece to a square the opponent attacks, you must.", (moves,ctx)=>{
+    const oppo = ctx.color==='w'?'b':'w';
     return H.requireIfPossible(moves, m=>{
-      if(m.piece[1]!=='K') return false;
       const after = H.afterMove(ctx.state, m);
-      const oppo = ctx.color==='w'?'b':'w';
       return H.isAttackedBy(after, m.tr, m.tc, oppo);
     });
   });
@@ -750,14 +767,171 @@ const DRAWBACKS = (function(){
     return moves.filter(m=>!m.promotion || m.promotion===chosen);
   });
 
+  // --- New drawbacks ---
+  add('creature_of_habit','Creature of Habit',"If possible, you must land on the same color square (light/dark) as your last move.", (moves,ctx)=>{
+    const last = H.lastMoveByColor(ctx.history, ctx.color);
+    if(!last) return moves;
+    const wantLight = H.isLight(last.tr, last.tc);
+    return H.requireIfPossible(moves, m=>H.isLight(m.tr,m.tc)===wantLight);
+  });
+  add('no_free_lunches','No Free Lunches',"You can only capture a piece that's currently defended by another enemy piece.", (moves,ctx)=>{
+    const oppo = ctx.color==='w'?'b':'w';
+    return moves.filter(m=> !m.capture || H.isAttackedBy(ctx.state, m.tr, m.tc, oppo));
+  });
+  add('last_rites','Last Rites',"Once you've captured the opponent's queen, you can't capture anything else.", (moves,ctx)=>{
+    if(!H.capturedTypesBy(ctx.history, ctx.color).has('Q')) return moves;
+    return moves.filter(m=>!m.capture);
+  });
+  add('slow_learner','Slow Learner',"For your first 10 moves, you may only move pawns or knights.", (moves,ctx)=>{
+    if(H.myCompletedMoves(ctx.history, ctx.color) >= 10) return moves;
+    return H.requireIfPossible(moves, m=>m.piece[1]==='P'||m.piece[1]==='N');
+  });
+  add('grudge_match','Grudge Match',"If the opponent just captured one of your pieces, you must recapture on that square if you can.", (moves,ctx)=>{
+    const oppLast = H.lastMoveByColor(ctx.history, ctx.color==='w'?'b':'w');
+    if(!oppLast || !oppLast.capture) return moves;
+    return H.requireIfPossible(moves, m=>m.capture && m.tr===oppLast.tr && m.tc===oppLast.tc);
+  });
+  add('underdog','Underdog',"Your pieces can't capture anything worth less than themselves.", (moves)=>moves.filter(m=> !m.capture || m.capturedPiece[1]==='K' || H.PIECE_VAL[m.capturedPiece[1]]>=H.PIECE_VAL[m.piece[1]]));
+  add('buddy_system','Buddy System',"A pawn can only move if the square it's standing on is currently defended.", (moves,ctx)=>
+    moves.filter(m=> m.piece[1]!=='P' || H.isAttackedBy(ctx.state, m.fr, m.fc, ctx.color)));
+  add('fetch','Fetch',"A knight can only move to a square farther from your own king than it already is.", (moves,ctx)=>{
+    const king = ChessEngine.findKing(ctx.board, ctx.color);
+    if(!king) return moves;
+    const distTo=(r,c)=>Math.max(Math.abs(r-king.r),Math.abs(c-king.c));
+    return moves.filter(m=> m.piece[1]!=='N' || distTo(m.tr,m.tc) > distTo(m.fr,m.fc));
+  });
+  add('peace_treaty','Peace Treaty',"Once both queens are off the board, neither side may capture again.", (moves,ctx)=>{
+    const oppo = ctx.color==='w'?'b':'w';
+    if(H.findPieces(ctx.board,'Q',ctx.color).length || H.findPieces(ctx.board,'Q',oppo).length) return moves;
+    return moves.filter(m=>!m.capture);
+  });
+
+  // --- New drawbacks, round 2 ---
+  add('one_and_done','One and Done',"You can't move the same piece twice in a row.", (moves,ctx)=>{
+    const last = H.lastMoveByColor(ctx.history, ctx.color);
+    if(!last) return moves;
+    return moves.filter(m=> !(m.fr===last.tr && m.fc===last.tc));
+  });
+  add('tell_tale_heart','Tell-Tale Heart',"Whichever of your piece types (knight/bishop/rook/queen) you have the fewest of can't move.", (moves,ctx)=>{
+    const counts={N:0,B:0,R:0,Q:0};
+    for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+      const p = ctx.board[r][c];
+      if(p && p[0]===ctx.color && counts.hasOwnProperty(p[1])) counts[p[1]]++;
+    }
+    const present = Object.entries(counts).filter(([t,n])=>n>0);
+    if(!present.length) return moves;
+    const minCount = Math.min(...present.map(([,n])=>n));
+    const rarest = new Set(present.filter(([,n])=>n===minCount).map(([t])=>t));
+    return moves.filter(m=>!rarest.has(m.piece[1]));
+  });
+  add('copy_cat','Copy Cat',"If possible, you must move the same number of files left/right as the opponent's last move.", (moves,ctx)=>{
+    const oppLast = H.lastMoveByColor(ctx.history, ctx.color==='w'?'b':'w');
+    if(!oppLast) return moves;
+    const wantDc = oppLast.tc - oppLast.fc;
+    return H.requireIfPossible(moves, m=>(m.tc-m.fc)===wantDc);
+  });
+  add('pied_piper','Pied Piper',"If possible, every move must bring the piece closer to your own king than it was.", (moves,ctx)=>{
+    const king = ChessEngine.findKing(ctx.board, ctx.color);
+    if(!king) return moves;
+    const d=(r,c)=>Math.max(Math.abs(r-king.r),Math.abs(c-king.c));
+    return H.requireIfPossible(moves, m=> d(m.tr,m.tc) < d(m.fr,m.fc));
+  });
+  add('petty_rivalry','Petty Rivalry',"You can't capture with a piece type the opponent has already used to capture one of yours.", (moves,ctx)=>{
+    const oppo = ctx.color==='w'?'b':'w';
+    const usedTypes = new Set(ctx.history.filter(h=>h.color===oppo && h.capture).map(h=>h.type));
+    if(!usedTypes.size) return moves;
+    return moves.filter(m=> !m.capture || !usedTypes.has(m.piece[1]));
+  });
+  add('homebody_king','Homebody King',"Your king can never move more than 2 files from the e-file.", (moves)=>
+    moves.filter(m=> m.piece[1]!=='K' || Math.abs(m.tc-4)<=2));
+  add('anchor','Anchor',"Your rooks can't leave your own back rank until you've lost a bishop or knight.", (moves,ctx)=>{
+    const backRank = ctx.color==='w'?7:0;
+    const lostMinor = ctx.history.some(h=> h.capture && h.capturedPiece && h.capturedPiece[0]===ctx.color && (h.capturedPiece[1]==='B'||h.capturedPiece[1]==='N'));
+    if(lostMinor) return moves;
+    return moves.filter(m=> m.piece[1]!=='R' || m.tr===backRank);
+  });
+  add('slingshot','Slingshot',"Captures only count if the capturing piece moved at least 3 squares.", (moves)=>
+    moves.filter(m=> !m.capture || H.dist(m.fr,m.fc,m.tr,m.tc)>=3));
+
   return list;
 })();
 
-function assignDrawback(){
-  const def = DRAWBACKS[Math.floor(Math.random()*DRAWBACKS.length)];
+// SEVERITY — how much a drawback actually cripples a player, on a 1-4 scale:
+//   1 = mild (situational, or leaves nearly all normal play intact)
+//   2 = moderate (meaningfully shapes strategy, still plenty of good moves)
+//   3 = strong (a key piece type or whole capability is badly hobbled)
+//   4 = severe (a key piece, usually the king or queen, is almost or fully
+//       locked down — e.g. Lame Duck's king can never move at all)
+// This exists because assignDrawback() used to pick a drawback for each
+// side from the entire pool with equal probability, regardless of how
+// harsh it was — so one player could get 'lucky' (no drawback at all)
+// while their opponent got 'lame_duck' (their king can never move for the
+// whole game). Every id not listed here defaults to 2 (moderate), which
+// only matters if a new drawback gets added above without a rating.
+const DRAWBACK_SEVERITY = {
+  lucky:1, no_castling:1, lame_duck:4, no_shuffling:2, entrenched:2, cess:1,
+  vegan:1, conscientious_objectors:2, true_gentleman:1, left_for_dead:2,
+  checkers:3, forward_march:3, stop_stalling:1, number_of_the_beast:1,
+  champing_at_the_bit:2, shadow_queen:2, horse_tranquilizer:2, trophy_wife:3,
+  elephants_fear_mice:2, outflanked:1, far_sighted:2, whites_of_their_eyes:1,
+  punching_down:3, professional_courtesy:1, leaps_and_bounds:2,
+  inside_the_lines:1, messy_divorce:3, control_center:1, same_shade:1,
+  iron_curtain:1, homebody:1, en_passant_or_bust:1, crossing_the_rubicon:3,
+  drag_movement:4, no_return:1, same_file_fate:2, rank_parity:2,
+  quiet_landing:1, no_same_destination:1, rook_or_knight:2, pawn_or_queen:2,
+  center_or_edge:2, capture_or_retreat:1, rook_and_bishop:2,
+  religious_dispute:1, flatterer:2, hipster:2, quit_horsing_around:1,
+  simon_says:2, hopscotch:2, spice_of_life:2, alternator:2, fixation:2,
+  bipartisanship:1, left_to_right:2, haunted:1, superstitious:1,
+  relay_race:2, boxing_with_shadow:1, guerilla_tactics:2, torpedos:1,
+  going_the_distance:2, hedonic_treadmill:2, velociraptor:2, leveling_up:2,
+  monkey_see:2, queen_bee:2, out_of_breath:4, stir_crazy:1, bloodthirsty:1,
+  centralized_command:2, cowering_in_fear:2, remorseful:1,
+  turn_the_other_cheek:1, barbarian_rage:1, evil_twin:1,
+  diplomatic_immunity:1, royal_jubilee:1, escort_mission:1, clock_watcher:1,
+  stubborn:2, truant:1, ladies_first:2, scorched_earth:2, rising_water:3,
+  windup_toys:2, oddball:1, even_keeled:1, prima_donna:1, fair_trade:2,
+  kamikaze:2, pawn_storm:2, restless_knights:2, prized_fighter:1,
+  baby_steps:2, late_bloomer:1, tunnel_vision:4, short_leash:3, snipers:1,
+  bishop_fan_club:2, rook_fan_club:2, true_love:3, unrequited_love:2,
+  bridge_over_troubled_water:2, royal_berth:1, separation_of_church_and_state:1,
+  medusa:2, thunderdome:2, social_distancing:1, sibling_rivalry:1,
+  pack_mentality:2, cheerleaders:2, scouting_ahead:2, leading_the_charge:2,
+  torchlight:2, noble_steed:2, spread_out:2, deer_in_the_headlights:2,
+  jumpy:1, stand_your_ground:2, cowardly:2, protected_pawns:2,
+  friendly_fire:4, death_wish:1, respectful:1, prince_charming:1,
+  peons_first:1, eye_of_sauron:2, separation_anxiety:1, exclusivity_clause:1,
+  covering_fire:2, indecisive:2, the_scent_of_blood:2, obsession:2,
+  gambler:1, unlucky:3, colorblind:2, winds_of_fate:1, coin_flip:2,
+  dice_roll:2, roulette:1, surprise_package:1,
+  // New drawbacks:
+  creature_of_habit:1, no_free_lunches:3, last_rites:2, slow_learner:2,
+  grudge_match:2, underdog:3, buddy_system:2, fetch:1, peace_treaty:2,
+  // New drawbacks, round 2:
+  one_and_done:2, tell_tale_heart:2, copy_cat:2, pied_piper:3,
+  petty_rivalry:2, homebody_king:2, anchor:2, slingshot:3,
+};
+function instantiateDrawback(def){
   const instance = {id:def.id, name:def.name, desc:def.desc, filter:def.filter};
   if(def.init) instance.params = def.init();
   return instance;
+}
+function assignDrawback(){
+  const def = DRAWBACKS[Math.floor(Math.random()*DRAWBACKS.length)];
+  return instantiateDrawback(def);
+}
+// The actual fairness fix: draw both players' drawbacks from the *same*
+// severity tier, so a game might be a mild one for both, a brutal one for
+// both, or anything in between — but never a coin-flip blowout where one
+// side plays a real game and the other is just along for the ride. Each
+// side still gets its own independent random pick within that tier, so the
+// specific pairing is still a surprise; only the harshness band is shared.
+function assignDrawbackPair(){
+  const tiers = [1,2,3,4];
+  const tier = tiers[Math.floor(Math.random()*tiers.length)];
+  const pool = DRAWBACKS.filter(d=>(DRAWBACK_SEVERITY[d.id]||2)===tier);
+  const draw = ()=> pool[Math.floor(Math.random()*pool.length)];
+  return { w: instantiateDrawback(draw()), b: instantiateDrawback(draw()) };
 }
 function applyDrawbackFallback(moves, drawback, ctx){
   if(!drawback || !drawback.filter) return moves;

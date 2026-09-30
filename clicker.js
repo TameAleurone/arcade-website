@@ -5,7 +5,7 @@
   const CRIT_CHANCE = 0.10, CRIT_MULT = 3;
   const SURGE_MULT = 50, SURGE_DURATION = 4.0;
   const PRESTIGE_THRESHOLD = 100000;
-  const ACHIEVEMENTS = [[1000,'Novice Harvester'],[10000,'Energy Adept'],[100000,'Power Broker'],[1000000,'Energy Tycoon']];
+  const ACHIEVEMENTS = [[1000,'Novice Harvester','clicker_novice_harvester'],[10000,'Energy Adept','clicker_energy_adept'],[100000,'Power Broker','clicker_power_broker'],[1000000,'Energy Tycoon','clicker_energy_tycoon']];
   const OFFLINE_EFFICIENCY = 0.5, MAX_OFFLINE_SECONDS = 4*3600, MIN_OFFLINE_SECONDS = 20;
   let UPGRADES; // [name, baseCost, cps, clickPower]
   let coins, lifetime, prestigePoints, achievements, counts, surgeActive, surgeTimeLeft, surgeTimer, lastTs;
@@ -53,12 +53,16 @@
   }
   function showMsg(t){ const el=document.getElementById('clk-msg'); if(el) el.textContent=t; }
   function checkAchievements(){
-    ACHIEVEMENTS.forEach(([threshold,name])=>{
+    ACHIEVEMENTS.forEach(([threshold,name,sharedId])=>{
       if(lifetime>=threshold && !achievements.includes(name)){
         achievements.push(name);
         showMsg(`🏆 Achievement unlocked: ${name}!`);
         save();
       }
+      // Also register with the shared cross-game system (idempotent) so it
+      // shows up on the Stats & Achievements hub page alongside every
+      // other game's achievements, not just in this game's own small panel.
+      if(lifetime>=threshold) (typeof Achievements!=='undefined'&&Achievements.unlock(sharedId));
     });
   }
   function doHarvest(){

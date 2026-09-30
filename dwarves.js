@@ -85,6 +85,8 @@
       if(!aliveE.length){
         state='VICTORY';
         if(wave>highScore){ highScore=wave; Store.set('dwarves_high', highScore); }
+        if(wave>=5) (typeof Achievements!=='undefined'&&Achievements.unlock('dwarves_wave_5'));
+        if(wave>=10) (typeof Achievements!=='undefined'&&Achievements.unlock('dwarves_wave_10'));
       } else if(!aliveP.length){
         state='DEFEAT';
       }

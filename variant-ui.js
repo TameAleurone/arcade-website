@@ -16,6 +16,10 @@ function createChessVariant(variant, displayName){
   // stuck on an old board.
   let onlineStateSeq=0;
   let lastOnlineStateSeq=0;
+  let onlineGameId=null;
+  let syncRequestPending=false;
+  let onlineSyncWatchdog=null;
+  let lastOnlineStateAt=0;
   let orientation='w';
 
   function pieceSquareEl(r,c){ return container.querySelector(`[data-r="${r}"][data-c="${c}"]`); }
@@ -35,13 +39,35 @@ function createChessVariant(variant, displayName){
   function broadcastOnlineState(){
     if(mode==='online' && onlineRole==='host' && ArcadeOnline && ArcadeOnline.connected()){
       onlineStateSeq++;
-      sendOnline({type:'state', seq:onlineStateSeq, payload:fullSyncPayload()});
+      sendOnline({type:'state', gameId:onlineGameId, seq:onlineStateSeq, payload:fullSyncPayload()});
     }
   }
   function requestOnlineSync(){
-    if(mode==='online' && onlineRole==='guest' && ArcadeOnline && ArcadeOnline.connected()){
+    if(mode==='online' && onlineRole==='guest' && ArcadeOnline && ArcadeOnline.connected() && !syncRequestPending){
+      syncRequestPending=true;
       sendOnline({type:'requestSync', lastSeq:lastOnlineStateSeq});
+      setTimeout(()=>{ syncRequestPending=false; }, 1000);
     }
+  }
+  function startOnlineSyncWatchdog(){
+    if(onlineSyncWatchdog) clearInterval(onlineSyncWatchdog);
+    lastOnlineStateAt=Date.now();
+    onlineSyncWatchdog=setInterval(()=>{
+      if(mode!=='online' || onlineRole!=='guest' || !ArcadeOnline || !ArcadeOnline.connected()) return;
+      // Two different things can leave the guest stuck, and both need the
+      // same fix (ask the host to resend its state):
+      //  - `state` is still null: the very first broadcast after joining
+      //    never arrived (dropped WS message, or a JSONP race where the
+      //    host's broadcast fired before the guest's poll loop was up).
+      //    The board area just stays empty forever — this is the "Black's
+      //    board never loads" case, and the old `state && ...` guard below
+      //    meant the watchdog could never fire to recover from it.
+      //  - `state` exists but is stuck showing White's turn: a later
+      //    packet got dropped mid-game.
+      const stuckWithNoStateYet = !state;
+      const stuckMidGame = state && state.turn==='w';
+      if((stuckWithNoStateYet || stuckMidGame) && Date.now()-lastOnlineStateAt>2500) requestOnlineSync();
+    }, 1000);
   }
   function applyFullSync(p){
     mode='online';
@@ -58,52 +84,95 @@ function createChessVariant(variant, displayName){
     container.querySelector('#chess-play-area').style.display='block';
   }
   async function onlineHost(){
+    // host()/join() are both async (a network round-trip), and the button
+    // that triggers them had no guard against firing twice — a fast
+    // double-click, or a double-tap (touch devices routinely register two
+    // taps close together), could fire this before the first call resolves
+    // and race two concurrent 'host' requests against the server. Disabling
+    // the button for the duration closes that window; it's re-enabled on
+    // failure so the user can retry, and stays disabled on success since
+    // the room-code panel replaces this button's purpose anyway.
+    const hostBtn = container.querySelector('#chess-online-host');
+    if(hostBtn) hostBtn.disabled = true;
     onlineRole='host'; myColor='w';
     container.querySelector('#chess-online-room').style.display='block';
     onlineStatus('Creating room…');
     try{
       const code = await ArcadeOnline.host({
-        onConnect:()=>{ onlineStatus('Opponent connected! You are White.'); showOnlinePlay(); newGame({mode:'online'}); },
+        // The server sends this exact same 'peer-connected' signal both the
+        // first time a guest joins AND every time a guest's connection drops
+        // and reconnects mid-game (their reconnect is just a fresh 'join').
+        // There's no separate event for "this is a rejoin" — so without the
+        // onlineGameId check below, any guest wifi hiccup would silently
+        // wipe the whole game back to move 1 for both players. Once a game
+        // has actually started, treat onConnect as "resync them", not
+        // "start over".
+        onConnect:()=>{
+          if(onlineGameId){
+            onlineStatus('Opponent reconnected! Resyncing…');
+            showOnlinePlay();
+            broadcastOnlineState();
+          } else {
+            onlineStatus('Opponent connected! You are White.');
+            showOnlinePlay();
+            newGame({mode:'online'});
+          }
+        },
         onMessage:onHostMessage,
         onClose:()=>{ onlineStatus('Opponent disconnected.'); },
         onReconnecting:()=>onlineStatus('Connection dropped — reconnecting…'),
-        onReconnected:()=>onlineStatus('Reconnected. Waiting for your opponent…')
+        onReconnected:()=>{ onlineStatus('Reconnected! Resyncing opponent…'); broadcastOnlineState(); }
       });
       container.querySelector('#chess-room-code').textContent = code;
       onlineStatus('Share this room code with your friend. Waiting…');
     }catch(e){
       onlineRole=null; onlineStatus(e && e.message ? e.message : 'Could not create room. Try again.'); console.error(e);
+      if(hostBtn) hostBtn.disabled = false;
     }
   }
   async function onlineJoin(){
     const code = container.querySelector('#chess-room-input').value.trim();
     if(!code) return onlineStatus('Enter a room code first.');
+    const joinBtn = container.querySelector('#chess-online-join'); // see onlineHost's comment on why this guard exists
+    if(joinBtn) joinBtn.disabled = true;
     onlineRole='guest'; myColor='b'; mode='online';
     container.querySelector('#chess-online-room').style.display='block';
     container.querySelector('#chess-room-code').textContent = code;
     onlineStatus('Joining room…');
     try{
-      // The server only tells the HOST when a peer connects — it never
-      // sends that message to the guest, so this join() promise resolving
-      // is the guest's only real signal that they made it in. Putting
+      // The server never sends 'peer-connected' to the guest for their own
+      // initial join — only the host gets that — so this join() promise
+      // resolving is the guest's real signal that they made it in. Putting
       // showOnlinePlay() inside onConnect (as this used to) meant it never
       // ran: joining as guest looked like it silently did nothing.
+      // BUT the server *does* send the guest a fresh 'peer-connected' if the
+      // host later drops and reclaims the room (see server.js's 'reclaim'
+      // handler) — that's the one case ArcadeOnline's onConnect fires here.
+      // Without a handler for it, the guest's status stayed stuck on "Host
+      // disconnected." forever even after the host was back and moves were
+      // flowing again.
       await ArcadeOnline.join(code, {
         onMessage:onGuestMessage,
+        onConnect:()=>{ onlineStatus('Opponent reconnected!'); requestOnlineSync(); },
         onClose:()=>{ onlineStatus('Host disconnected.'); },
         onReconnecting:()=>onlineStatus('Connection dropped — reconnecting…'),
         onReconnected:()=>{ onlineStatus('Reconnected!'); requestOnlineSync(); }
       });
       onlineStatus('Connected! You are Black. Waiting for the host to start…');
       showOnlinePlay();
+      startOnlineSyncWatchdog();
     }catch(e){
       onlineRole=null; onlineStatus(e && e.message ? e.message : 'Could not join that room. Check the code.'); console.error(e);
+      if(joinBtn) joinBtn.disabled = false;
     }
   }
   function onHostMessage(m){
     if(!m) return;
     if(m.type==='requestSync'){ broadcastOnlineState(); return; }
-    if(state.turn!=='b') return; // only accept moves/actions when it is the guest's turn
+    // If the guest has a stale view and sends a move for the wrong turn,
+    // don't silently discard it. Resend the authoritative position so the
+    // guest can recover and become clickable again.
+    if(state.turn!=='b'){ broadcastOnlineState(); return; }
     if(m.type==='requestMove') commitAndAdvance(m.move);
     else if(m.type==='requestTeleport') doTeleport(m.fr, m.fc, m.tr, m.tc);
     else if(m.type==='requestShield') doShield(m.r, m.c);
@@ -112,11 +181,21 @@ function createChessVariant(variant, displayName){
     if(!m) return;
     if(m.type==='state'){
       const seq=Number(m.seq)||0;
+      const gameId=String(m.gameId||'');
+      // A new game/rematch gets a fresh game id. Reset the guest's sequence
+      // tracker for that game so a new game's seq=1..N is never mistaken for
+      // an old packet from the previous game.
+      if(gameId && gameId!==onlineGameId){
+        onlineGameId=gameId;
+        lastOnlineStateSeq=0;
+      }
       // A gap means one or more state packets were lost. Ask the host for
       // its current authoritative state rather than waiting indefinitely.
       if(seq && lastOnlineStateSeq && seq>lastOnlineStateSeq+1) requestOnlineSync();
       if(seq && seq<=lastOnlineStateSeq) return;
       if(seq) lastOnlineStateSeq=seq;
+      syncRequestPending=false;
+      lastOnlineStateAt=Date.now();
       if(m.payload) applyFullSync(m.payload);
     }
   }
@@ -127,10 +206,19 @@ function createChessVariant(variant, displayName){
     mode = opts.mode; aiColor = opts.aiColor||'b'; aiDepth = opts.aiDepth||2;
     handoverPending = (mode==='2p'); // confirm who's starting before White's very first move too
     undoStack=[]; redoStack=[]; orientation='w';
-    if(mode==='online' && onlineRole==='host') onlineStateSeq=0;
-    if(mode==='online' && onlineRole==='guest') lastOnlineStateSeq=0;
+    if(mode==='online' && onlineRole==='host'){
+      // Every rematch gets a new game id. The sequence can safely restart
+      // at zero because the guest uses the game id to reset its tracker.
+      onlineGameId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      onlineStateSeq=0;
+    }
+    if(mode==='online' && onlineRole==='guest'){
+      // Do not reset the guest sequence here: the guest never starts the
+      // authoritative game. It resets only when it receives a new gameId.
+      syncRequestPending=false;
+    }
     if(variant==='dice_chess'){ movesLeftThisTurn=3; rollDice(); skipUnplayableDiceTurns(); }
-    if(variant==='drawback_chess'){ state.drawbacks = {w:assignDrawback(), b:assignDrawback()}; }
+    if(variant==='drawback_chess'){ state.drawbacks = assignDrawbackPair(); }
     render();
     maybeTriggerAI();
     if(mode==='online' && onlineRole==='host') broadcastOnlineState();
@@ -200,7 +288,10 @@ function createChessVariant(variant, displayName){
     const status = currentAllowedMoves();
     if(status.over) return;
     const isHumanTurn = mode==='ai' ? state.turn!==aiColor : (mode==='online' ? state.turn===myColor : true);
-    if(!isHumanTurn) return;
+    if(!isHumanTurn){
+      if(mode==='online' && onlineRole==='guest') requestOnlineSync();
+      return;
+    }
 
     if(spellMode==='teleport-select'){
       const p = state.board[r][c];
@@ -275,7 +366,14 @@ function createChessVariant(variant, displayName){
     selected=null; legalTargets=[];
     afterMoveAdvance(color);
   }
-  function moveSignature(m){ return `${m.fr},${m.fc},${m.tr},${m.tc},${m.piece},${m.isCastle||''},${m.isEnPassant?'ep':''},${m.promotion||''}`; }
+  // Note: the promotion field is deliberately normalized to a plain flag
+  // here (not the specific letter). The engine's own legal-move list only
+  // ever marks a promoting move with `promotion:true` (it doesn't choose a
+  // piece); the letter is chosen afterwards by the player and merged in by
+  // the caller. Including the literal value here would mean a request for
+  // "promote to Q" could never match the engine's "true"-flagged legal
+  // move, silently dropping every promotion (locally and over the network).
+  function moveSignature(m){ return `${m.fr},${m.fc},${m.tr},${m.tc},${m.piece},${m.isCastle||''},${m.isEnPassant?'ep':''},${m.promotion?'=':''}`; }
   function findCurrentLegalMove(move){
     if(!move) return null;
     const allowed=currentAllowedMoves().moves;
@@ -292,12 +390,20 @@ function createChessVariant(variant, displayName){
     if(mode==='online' && onlineRole==='guest'){
       const candidate = promo ? {...move,promotion:promo} : move;
       sendOnline({type:'requestMove', move:candidate});
+      selected=null; legalTargets=[]; pendingPromotion=null;
+      render();
       return;
     }
     const requested = promo ? {...move,promotion:promo} : move;
     const legal = findCurrentLegalMove(requested);
     if(!legal) return;
-    if(promo && legal.promotion) legal.promotion=promo;
+    // `requested.promotion` carries the actual chosen letter whether it got
+    // there via the local `promo` argument (human/host picking a piece) or
+    // was already embedded in an incoming network move (a guest's chosen
+    // letter, relayed as-is by onHostMessage). Either way it must replace
+    // the engine's generic `true` flag before the move is committed, or the
+    // board ends up with a piece code like "wtrue" instead of "wQ".
+    if(requested.promotion && legal.promotion) legal.promotion=requested.promotion;
     pushUndoSnapshot();
     const moverColor = legal.piece[0];
     ChessEngine.commitMove(state, legal);
@@ -461,6 +567,17 @@ function createChessVariant(variant, displayName){
     const msg = container.querySelector('.chess-msg');
     if(status.over){
       msg.textContent = status.result;
+      // One shared achievement across chess + every variant (they all run
+      // through this same render()). Only credit an actual decisive win
+      // for the human on this client, not a draw/stalemate and not the AI
+      // beating the human — result strings always read "White wins..." or
+      // "Black wins..." (checkmate, antichess's last-piece/no-moves wins,
+      // and dice/drawback chess's king-capture wins all say this).
+      const winnerColor = status.result.includes('White wins') ? 'w' : (status.result.includes('Black wins') ? 'b' : null);
+      if(winnerColor){
+        const humanWon = mode==='ai' ? winnerColor!==aiColor : (mode==='online' ? winnerColor===myColor : true);
+        if(humanWon) (typeof Achievements!=='undefined'&&Achievements.unlock('chess_checkmate'));
+      }
     } else if(aiThinking){
       msg.textContent = 'AI is thinking...';
     } else {

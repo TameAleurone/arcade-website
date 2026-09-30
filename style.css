@@ -97,10 +97,26 @@
     padding:9px 18px;border-radius:9px;cursor:pointer;font-size:0.95rem;margin:4px;
     text-decoration:none;display:inline-block;
     box-shadow:0 2px 0 rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
-    transition:border-color .12s ease, color .12s ease, transform .08s ease, box-shadow .08s ease;
+    transition:border-color .12s ease, color .12s ease, transform .08s ease, box-shadow .08s ease, opacity .15s ease;
   }
   .btn:hover{border-color:var(--cyan);color:var(--cyan);}
   .btn:active{transform:translateY(2px);box-shadow:0 0 0 rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);}
+  /* Keyboard/switch-device focus ring. This already existed for the custom
+     game-tile buttons (.c4-col, .grid-3 .cell, .mem-card) further down this
+     file, but never for plain .btn — the single most common interactive
+     element on every page (restart, pause, mode select, host/join, undo...).
+     :focus-visible (not :focus) so mouse/touch clicks don't show a ring,
+     only real keyboard/switch navigation does. */
+  .btn:focus-visible{outline:3px solid var(--cyan);outline-offset:2px;}
+  /* Disabled buttons previously had no styling at all here, so a disabled
+     .btn (there are 12+ real uses across the games — chess undo/redo, the
+     guest's restart button, wheel mid-spin, memory's used-up peek, low-gold
+     upgrade buttons...) looked identical to a live, clickable one. */
+  .btn:disabled{
+    opacity:0.45;cursor:not-allowed;color:var(--dim);
+    box-shadow:none;transform:none;border-color:var(--border);
+  }
+  .btn:disabled:hover{border-color:var(--border);color:var(--dim);}
   .btn.primary{
     border-color:rgba(80,200,255,.7);color:#071019;
     background:linear-gradient(180deg, #7adcff, var(--cyan));
@@ -108,6 +124,17 @@
     box-shadow:0 2px 0 rgba(20,110,150,.6), 0 0 18px rgba(80,200,255,.18), inset 0 1px 0 rgba(255,255,255,.4);
   }
   .btn.primary:hover{color:#071019;border-color:#fff;box-shadow:0 2px 0 rgba(20,110,150,.6), 0 0 26px rgba(80,200,255,.32), inset 0 1px 0 rgba(255,255,255,.5);}
+  .btn.primary:disabled{
+    opacity:0.5;color:rgba(7,16,25,.6);box-shadow:none;transform:none;
+    background:linear-gradient(180deg, #7adcff, var(--cyan));border-color:rgba(80,200,255,.35);
+  }
+  /* A toggled-on control (currently just Focus mode) gets a persistent
+     highlighted look, not just different button text, so its state reads
+     at a glance instead of requiring you to read the label. */
+  .btn[aria-pressed="true"]{
+    border-color:var(--cyan);color:#071019;
+    background:linear-gradient(180deg, #7adcff, var(--cyan));
+  }
   .hud{display:flex;gap:22px;justify-content:center;margin-bottom:14px;flex-wrap:wrap;}
   .hud div{background:var(--panel2);padding:6px 14px;border-radius:8px;border:1px solid var(--border);font-size:0.9rem;box-shadow:inset 0 1px 0 rgba(255,255,255,.04), 0 2px 6px rgba(0,0,0,.15);}
   .hud b{color:var(--yellow);}
@@ -555,6 +582,20 @@ canvas{ touch-action:none; }
 #game-container.focus-mode{position:fixed;inset:0;z-index:9999;overflow:auto;border-radius:0;max-width:none;margin:0;padding:28px;background:var(--bg);justify-content:flex-start}
 #game-container.focus-mode canvas{max-height:78vh;width:auto}
 @media (max-width:700px){
+  /* This is the actual reason chess and Memory's 6x6 board could render
+     too big on a phone. Every board/grid in this file is sized with vw or
+     percentage math meant to fit the *true* viewport (e.g. the chess board
+     below is width:min(92vw,352px)) — but zoom is a post-layout visual
+     magnification, not a layout input, so #game-fs-target's zoom:1.35
+     inflated an already-correctly-fitted board by another 35% on top of
+     that, overflowing the very screen it was just sized for. It's harmless
+     on a desktop/tablet where there's plenty of spare width either way,
+     which is why this only ever showed up "sometimes" — specifically on
+     narrower phones. Turning it off below this breakpoint lets every
+     board/grid's own responsive sizing render at the size it actually
+     computed, instead of being scaled back up past the edge of the screen.
+  */
+  #game-fs-target{zoom:1;}
   #game-container{padding:12px}
   .game-tools{margin-top:10px}
   .btn{min-height:42px}
