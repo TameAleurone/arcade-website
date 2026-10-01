@@ -1,10 +1,3 @@
-/* DRAWBACK CHESS — a large pool of secret-handicap move filters, ported from
-   the python drawbacks.py. Filters receive (moves, ctx) where ctx exposes
-   the state, the color the drawback applies to, the board, and a move
-   history array plus helper functions. Loss-condition-only drawbacks (a
-   separate mechanic in the source — "lose if X becomes true", independent
-   of move filtering) and a handful of drawbacks needing full per-piece
-   identity tracking or a live chess engine are not included here. */
 
 const DrawbackHelpers = (function(){
   function dist(fr,fc,tr,tc){ return Math.max(Math.abs(tr-fr), Math.abs(tc-fc)); }

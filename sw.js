@@ -1,13 +1,15 @@
-const CACHE_NAME = 'arcade-v8';
+const CACHE_NAME = 'arcade-v9';
 
 const ASSETS_TO_CACHE = [
   './',
   './2048.html',
   './antichess.html',
+  './atomic_chess.html',
   './breakout.html',
   './chess.html',
   './chess_hub.html',
   './clicker.html',
+  './combo_chess.html',
   './connect_four.html',
   './dice_chess.html',
   './dino.html',
@@ -18,6 +20,7 @@ const ASSETS_TO_CACHE = [
   './flyer.html',
   './idle_miner.html',
   './index.html',
+  './king_of_the_hill.html',
   './mario.html',
   './memory.html',
   './minesweeper.html',
@@ -26,6 +29,7 @@ const ASSETS_TO_CACHE = [
   './snake.html',
   './spell_chess.html',
   './stats_hub.html',
+  './tempo_chess.html',
   './tetris.html',
   './three_player_chess.html',
   './tictactoe.html',

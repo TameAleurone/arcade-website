@@ -59,9 +59,6 @@
         showMsg(`🏆 Achievement unlocked: ${name}!`);
         save();
       }
-      // Also register with the shared cross-game system (idempotent) so it
-      // shows up on the Stats & Achievements hub page alongside every
-      // other game's achievements, not just in this game's own small panel.
       if(lifetime>=threshold) (typeof Achievements!=='undefined'&&Achievements.unlock(sharedId));
     });
   }

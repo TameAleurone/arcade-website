@@ -7,6 +7,10 @@
     {id:'dice_chess', title:'Dice Chess', desc:'Three piece-type dice per turn. Make matching moves, with castling available when the King die permits it.', ready:true},
     {id:'spell_chess', title:'Spell Chess', desc:'Standard chess plus one Teleport and one Shield charge per side — including normal castling.', ready:true},
     {id:'drawback_chess', title:'Drawback Chess', desc:'Secret random handicaps layered over King Capture rules, with castling added to the move set.', ready:true},
+    {id:'atomic_chess', title:'Atomic Chess', desc:'Every capture explodes the surrounding squares (pawns spared). Blow up either king to win — just don\'t blow up your own.', ready:true},
+    {id:'king_of_the_hill', title:'King of the Hill', desc:'Standard chess rules, plus an instant win for marching your king onto one of the four center squares.', ready:true},
+    {id:'combo_chess', title:'Combo Chess', desc:'A piece that captures and can immediately capture again must keep chaining — extra turns for tactical combos.', ready:true},
+    {id:'tempo_chess', title:'Tempo Chess', desc:'Every 4th move earns you an immediate bonus move before your opponent gets to respond.', ready:true},
     {id:'three_player_chess', title:'Three-Player Chess', desc:'A hex board, three armies, any mix of human/AI.', ready:true},
   ];
   function init(c){

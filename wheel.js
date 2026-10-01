@@ -108,6 +108,7 @@
       multiplier=1; streak++;
     }
     if(seg.value!=='jackpot') jackpotPot += JACKPOT_GROWTH_PER_SPIN;
+    if(streak>=10) (typeof Achievements!=='undefined'&&Achievements.unlock('wheel_streak_10'));
     history.unshift(text);
     history = history.slice(0,5);
     if(score>best){ best=score; Store.set('wheel_high', best); }

@@ -102,7 +102,8 @@ const ChessEngine = (function(){
       castling: allowCastle ? {wK:true,wQ:true,bK:true,bQ:true} : {wK:false,wQ:false,bK:false,bQ:false},
       ep:null,
       teleportUsed:{w:false,b:false}, shieldUsed:{w:false,b:false}, shield:{w:null,b:null},
-      history: [], halfmoveClock: 0, positionCounts: {}
+      history: [], halfmoveClock: 0, positionCounts: {},
+      mustContinueFrom: null, moveCounts: {w:0,b:0}, inBonusMove: false
     };
     state.positionCounts[positionKey(state)]=1;
     return state;
@@ -113,7 +114,9 @@ const ChessEngine = (function(){
       castling: {...s.castling}, ep: s.ep ? {...s.ep} : null,
       teleportUsed: {...s.teleportUsed}, shieldUsed: {...s.shieldUsed},
       shield: {w: s.shield.w?{...s.shield.w}:null, b: s.shield.b?{...s.shield.b}:null},
-      history: s.history ? s.history.slice() : [], halfmoveClock: s.halfmoveClock || 0, positionCounts: {...(s.positionCounts || {})}
+      history: s.history ? s.history.slice() : [], halfmoveClock: s.halfmoveClock || 0, positionCounts: {...(s.positionCounts || {})},
+      mustContinueFrom: s.mustContinueFrom ? {...s.mustContinueFrom} : null,
+      moveCounts: {...(s.moveCounts || {w:0,b:0})}, inBonusMove: !!s.inBonusMove
     };
   }
   function inBounds(r,c){ return r>=0&&r<8&&c>=0&&c<8; }
@@ -180,7 +183,16 @@ const ChessEngine = (function(){
         const target = board[tr][tc];
         if(target && target[0]!==color) add(tr,tc, tr===promRow ? {promotion:true} : {});
         else if(!target && state.ep && state.ep.r===tr && state.ep.c===tc){
-          moves.push({fr:r,fc:c,tr,tc,piece,capture:true,capturedPiece:board[r][tc],isEnPassant:true});
+          // The captured pawn must actually be there and belong to the
+          // opponent. In standard chess this is always true by construction
+          // (ep is only ever live for the opponent's very next move), but
+          // Tempo Chess's bonus-move mechanic lets the same side move twice
+          // in a row — without this check, a pawn could "en passant" its
+          // own just-moved neighbor's now-empty square.
+          const besidePawn = board[r][tc];
+          if(besidePawn && besidePawn[0]!==color && besidePawn[1]==='P'){
+            moves.push({fr:r,fc:c,tr,tc,piece,capture:true,capturedPiece:besidePawn,isEnPassant:true});
+          }
         }
       });
     } else if(type==='N'){
@@ -229,10 +241,24 @@ const ChessEngine = (function(){
     // Chess960/Fischer Random deliberately keeps its own simplified rules and
     // does not offer castling. Every other chess variant supports castling.
     if(piece[1]==='K' && state.variant!=='fischer_random') addCastlingMoves(state, r, c, pseudo);
+    // Combo Chess: mid-chain, only the piece that just captured may move again.
+    if(state.variant==='combo_chess' && state.mustContinueFrom){
+      if(r!==state.mustContinueFrom.r || c!==state.mustContinueFrom.c) return [];
+      pseudo = pseudo.filter(m=>m.capture);
+    }
     if(kingCapture) return pseudo; // these variants do not enforce check
+    if(state.variant==='atomic_chess'){
+      // No check requirement, but a move that would blow up (or leave
+      // exploded) your own king is illegal — self-destruction is banned.
+      return pseudo.filter(m=>{
+        const clone = cloneState(state);
+        applyMoveRaw(clone, m, true);
+        return !!findKing(clone.board, color);
+      });
+    }
     return pseudo.filter(m=>{
       const clone = cloneState(state);
-      applyMoveRaw(clone, m);
+      applyMoveRaw(clone, m, true);
       return !isInCheck(clone, color);
     });
   }
@@ -256,7 +282,14 @@ const ChessEngine = (function(){
     const boardKey=state.board.map(row=>row.map(p=>p||'--').join('')).join('/');
     const rights=['wK','wQ','bK','bQ'].filter(k=>state.castling[k]).join('')||'-';
     const ep=state.ep ? `${state.ep.r},${state.ep.c}` : '-';
-    return `${boardKey}|${state.turn}|${rights}|${ep}`;
+    // Distinguish otherwise-identical positions that are mid-chain (Combo
+    // Chess) or mid-bonus-move (Tempo Chess) from ones that aren't —
+    // without this, a repeated board could look like a repeated *position*
+    // even though whose move (and what they still owe) differs.
+    let extra = '';
+    if(state.variant==='combo_chess' && state.mustContinueFrom) extra += `|chain${state.mustContinueFrom.r}${state.mustContinueFrom.c}`;
+    if(state.variant==='tempo_chess') extra += `|t${state.inBonusMove?1:0}${(state.moveCounts&&state.moveCounts[state.turn]||0)%4}`;
+    return `${boardKey}|${state.turn}|${rights}|${ep}${extra}`;
   }
   function seedPositionCounts(state){
     if(!state.positionCounts || Object.keys(state.positionCounts).length===0){
@@ -265,8 +298,12 @@ const ChessEngine = (function(){
     return state.positionCounts;
   }
 
-  // mutates state in place, no legality checks (used internally + for committing a chosen legal move)
-  function applyMoveRaw(state, move){
+  // mutates state in place, no legality checks (used internally + for committing a chosen legal move).
+  // skipExtraTurn suppresses the combo_chess/tempo_chess extra-turn side
+  // effects below — used when a caller is only probing legality (does this
+  // move leave my king in check / blow up my own king?), not actually
+  // playing the position forward.
+  function applyMoveRaw(state, move, skipExtraTurn){
     const board = state.board;
     const piece = move.piece, color = piece[0];
     board[move.fr][move.fc] = null;
@@ -284,6 +321,18 @@ const ChessEngine = (function(){
       if(move.tr===(oppo==='w'?7:0) && move.tc===0) state.castling[oppo+'Q']=false;
       if(move.tr===(oppo==='w'?7:0) && move.tc===7) state.castling[oppo+'K']=false;
     }
+    // Atomic Chess: any capture (including en passant) explodes a 3x3 blast
+    // around the captured square — the capturing piece included, pawns
+    // caught in the blast spared, per the real Atomic Chess rules.
+    if(state.variant==='atomic_chess' && (move.capture || move.isEnPassant)){
+      board[move.tr][move.tc] = null;
+      for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){
+        const rr=move.tr+dr, cc=move.tc+dc;
+        if(!inBounds(rr,cc)) continue;
+        const p = board[rr][cc];
+        if(p && p[1]!=='P') board[rr][cc]=null;
+      }
+    }
     state.ep = move.isDoubleStep ? {r:(move.fr+move.tr)/2, c:move.fc} : null;
     state.halfmoveClock = (piece[1]==='P' || move.capturedPiece) ? 0 : (state.halfmoveClock||0) + 1;
     if(!state.history) state.history = [];
@@ -293,12 +342,65 @@ const ChessEngine = (function(){
       capture: !!move.capturedPiece, capturedPiece: move.capturedPiece||null,
       isEnPassant: !!move.isEnPassant, isCastle: move.isCastle||null, promotion: move.promotion||null
     });
-    state.turn = color==='w'?'b':'w';
+    let turnChanges = true;
+    if(!skipExtraTurn){
+      // Combo Chess: a piece that just captured and can immediately
+      // capture again must continue the chain with that same piece.
+      if(state.variant==='combo_chess'){
+        const stillThere = board[move.tr][move.tc];
+        if(move.capturedPiece && stillThere && stillThere[0]===color){
+          // Exclude a pseudo-capture of the enemy king: in a check-enforced
+          // variant like combo_chess the king itself is never legitimately
+          // captured (checkmate ends the game first), so it can't be a real
+          // chain continuation — only non-king captures count.
+          const further = pseudoMovesForPiece(state, move.tr, move.tc).filter(m=>m.capture && m.capturedPiece && m.capturedPiece[1]!=='K');
+          if(further.length){ state.mustContinueFrom = {r:move.tr,c:move.tc}; turnChanges = false; }
+          else state.mustContinueFrom = null;
+        } else {
+          state.mustContinueFrom = null;
+        }
+      }
+      // Tempo Chess: every 4th move earns an immediate bonus move (the
+      // bonus move itself doesn't count toward the next bonus).
+      if(state.variant==='tempo_chess'){
+        if(state.inBonusMove){
+          state.inBonusMove = false;
+        } else {
+          state.moveCounts[color] = (state.moveCounts[color]||0) + 1;
+          if(state.moveCounts[color] % 4 === 0){ state.inBonusMove = true; turnChanges = false; }
+        }
+      }
+    }
+    if(turnChanges) state.turn = color==='w'?'b':'w';
     const key=positionKey(state);
     state.positionCounts[key]=(state.positionCounts[key]||0)+1;
   }
   function commitMove(state, move){
     applyMoveRaw(state, move);
+  }
+  // FIDE "dead position" insufficient-material draw: no pawns/rooks/queens
+  // left, and what remains can't force checkmate against any defense —
+  // K v K, K+one minor v K, or K+B v K+B where both bishops sit on the
+  // same square color (so neither side can ever deliver mate).
+  function insufficientMaterial(state){
+    const board = state.board;
+    const minors = [];
+    for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+      const p = board[r][c];
+      if(!p) continue;
+      if(p[1]==='P' || p[1]==='Q' || p[1]==='R') return false;
+      if(p[1]==='N' || p[1]==='B') minors.push({color:p[0], type:p[1], r, c});
+    }
+    if(minors.length===0) return true;
+    if(minors.length===1) return true;
+    if(minors.length===2){
+      const [a,b] = minors;
+      if(a.type==='B' && b.type==='B' && a.color!==b.color){
+        const aLight = (a.r+a.c)%2===0, bLight = (b.r+b.c)%2===0;
+        if(aLight===bLight) return true;
+      }
+    }
+    return false;
   }
   function gameStatus(state){
     const color = state.turn;
@@ -335,11 +437,39 @@ const ChessEngine = (function(){
       if((state.halfmoveClock||0)>=100) return {over:true, result:'50-move rule — draw'};
       return {over:false, moves};
     }
+    if(state.variant==='atomic_chess'){
+      const oppo = color==='w'?'b':'w';
+      const myKing = findKing(state.board, color);
+      const oppoKing = findKing(state.board, oppo);
+      // Blowing up either king (your own included, from a reckless capture)
+      // ends the game immediately — no check requirement beforehand.
+      if(!myKing) return {over:true, result:`${oppo==='w'?'White':'Black'} wins — King Exploded!`};
+      if(!oppoKing) return {over:true, result:`${color==='w'?'White':'Black'} wins — King Exploded!`};
+      const moves = allLegalMoves(state, color);
+      // legalMovesForPiece already filters out self-destructing moves for
+      // atomic_chess without requiring check, so zero legal moves here is
+      // always a stalemate (a draw), matching real Atomic Chess rules.
+      if(moves.length===0) return {over:true, result:'Stalemate — draw'};
+      if(insufficientMaterial(state)) return {over:true, result:'Insufficient material — draw'};
+      seedPositionCounts(state);
+      if((state.positionCounts[positionKey(state)]||0)>=3) return {over:true, result:'Threefold repetition — draw'};
+      if((state.halfmoveClock||0)>=100) return {over:true, result:'50-move rule — draw'};
+      return {over:false, moves};
+    }
+    if(state.variant==='king_of_the_hill'){
+      const centerSquares = [[3,3],[3,4],[4,3],[4,4]];
+      for(const [r,c] of centerSquares){
+        const p = state.board[r][c];
+        if(p && p[1]==='K') return {over:true, result:`${p[0]==='w'?'White':'Black'} wins — King of the Hill!`};
+      }
+      // otherwise falls through to the standard rules below
+    }
     const moves = allLegalMoves(state, color);
     if(moves.length===0){
       if(isInCheck(state,color)) return {over:true, result:`Checkmate — ${color==='w'?'Black':'White'} wins!`};
       return {over:true, result:'Stalemate — draw'};
     }
+    if(insufficientMaterial(state)) return {over:true, result:'Insufficient material — draw'};
     seedPositionCounts(state);
     if((state.positionCounts[positionKey(state)]||0)>=3) return {over:true, result:'Threefold repetition — draw'};
     if((state.halfmoveClock||0)>=100) return {over:true, result:'50-move rule — draw'};
@@ -391,7 +521,10 @@ const ChessEngine = (function(){
       const mv = m.promotion ? {...m, promotion:'Q'} : m;
       const clone = cloneState(state);
       applyMoveRaw(clone, mv);
-      const val = minimax(clone, depth-1, alpha, beta, !maximizing);
+      // In extra-turn variants (combo/tempo chess) the same side can move
+      // again, so "maximizing" for the recursive call must follow whose
+      // turn it actually is in the resulting position, not just flip.
+      const val = minimax(clone, depth-1, alpha, beta, clone.turn==='w');
       if(maximizing){ best=Math.max(best,val); alpha=Math.max(alpha,val); }
       else { best=Math.min(best,val); beta=Math.min(beta,val); }
       if(beta<=alpha) break;
@@ -426,7 +559,7 @@ const ChessEngine = (function(){
       const mv = m.promotion ? {...m, promotion:'Q'} : m;
       const clone = cloneState(state);
       applyMoveRaw(clone, mv);
-      const val = minimax(clone, Math.max(0, depth-1), -Infinity, Infinity, !maximizing);
+      const val = minimax(clone, Math.max(0, depth-1), -Infinity, Infinity, clone.turn==='w');
       if((maximizing && val>bestVal) || (!maximizing && val<bestVal)){ bestVal=val; bestMoves=[mv]; }
       else if(val===bestVal) bestMoves.push(mv);
     }
@@ -434,6 +567,7 @@ const ChessEngine = (function(){
   }
   return {
     UNICODE, PIECE_VALUE, newState, cloneState, allLegalMoves, legalMovesForPiece,
-    commitMove, gameStatus, isInCheck, aiPickMove, isSquareAttacked, findKing, moveToNotation, castlingRights, positionKey
+    commitMove, gameStatus, isInCheck, aiPickMove, isSquareAttacked, findKing, moveToNotation, castlingRights, positionKey,
+    insufficientMaterial
   };
 })();

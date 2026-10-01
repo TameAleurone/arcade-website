@@ -51,9 +51,6 @@
   }
   let groundScrollX=0;
   function loop(ts){
-    // Use real frame-to-frame elapsed time instead of assuming 60fps, so
-    // speed/scoring don't run faster on 90/120/144Hz+ displays. Clamp to
-    // avoid a huge jump after the tab was backgrounded.
     const dt = lastTs!=null ? Math.min(1/20, (ts-lastTs)/1000) : 1/60;
     lastTs = ts;
     if(!gameOver && !paused){
@@ -146,7 +143,6 @@
       ctx.fillText(info.label, p.x, p.y+3);
     });
 
-    // dino: rounded body + simple alternating running legs
     const flashing = invincibleTimer>0 && Math.floor(invincibleTimer*20)%2===0;
     ctx.globalAlpha = flashing ? 0.4 : 1;
     if(dino.onGround){

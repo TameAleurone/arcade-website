@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tempo Chess — Arcade Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Monoton&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-game-id="tempo_chess" data-back-href="chess_hub.html" data-back-label="Chess Games">
+<div id="app" class="game-page">
+  <header class="game-topbar">
+    <a href="index.html" class="game-brand">ARCADE HUB</a>
+    <span class="game-topbar-hint">Press <kbd>Esc</kbd> to return to Chess Games</span>
+  </header>
+
+  <div id="game-view">
+    <div id="game-fs-target">
+      <div id="game-header">
+        <a id="back-btn" class="btn" href="chess_hub.html">&larr; Back to Chess Games</a>
+        <h2 id="game-title">Tempo Chess</h2>
+      </div>
+      <div id="game-container"></div>
+    </div>
+  </div>
+
+  <footer>Arcade Hub &mdash; web edition.</footer>
+</div>
+
+<script src="main.js"></script>
+<script src="game-quality.js"></script>
+<script src="achievements.js"></script>
+<script src="engine.js"></script>
+<script src="drawbacks.js"></script>
+<script src="online-config.js"></script>
+<script src="online.js"></script>
+<script src="variant-ui.js"></script>
+<script>bootGame('tempo_chess');</script>
+</body>
+</html>

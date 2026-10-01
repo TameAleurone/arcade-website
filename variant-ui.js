@@ -21,6 +21,14 @@ function createChessVariant(variant, displayName){
   let onlineSyncWatchdog=null;
   let lastOnlineStateAt=0;
   let orientation='w';
+  // Drawback Chess admin/dev mode (F1 to toggle): reveals both sides'
+  // drawbacks regardless of whose turn it is or who's playing, and lets
+  // F2/F3 open a picker list to choose White's/Black's drawback on demand —
+  // for testing specific drawbacks or demoing the feature without replaying
+  // a whole game to see a particular one come up.
+  let drawbackAdminMode=false;
+  // Which color's drawback picker overlay is currently open ('w'/'b'/null).
+  let drawbackPickerColor=null;
 
   function pieceSquareEl(r,c){ return container.querySelector(`[data-r="${r}"][data-c="${c}"]`); }
 
@@ -504,7 +512,36 @@ function createChessVariant(variant, displayName){
       if(e.key.toLowerCase()==='f'){ orientation=orientation==='w'?'b':'w'; render(); }
       else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); undoMove(); }
       else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){ e.preventDefault(); redoMove(); }
-      else if(e.key==='Escape'){ selected=null; legalTargets=[]; pendingPromotion=null; spellMode=null; render(); }
+      else if(e.key==='Escape'){
+        // If there's something to clear, clear it and stop here — don't
+        // also let this same Escape bubble up to the site-wide Esc-to-hub
+        // handler (main.js) and immediately bounce out of an in-progress
+        // game. Only a "bare" Escape, with no picker/selection/promotion/
+        // spell pending, is allowed through to leave for the hub.
+        if(drawbackPickerColor){
+          e.stopPropagation();
+          drawbackPickerColor=null; render();
+        } else if(selected || legalTargets.length || pendingPromotion || spellMode){
+          e.stopPropagation();
+          selected=null; legalTargets=[]; pendingPromotion=null; spellMode=null; render();
+        }
+      }
+      else if(e.key==='F1' && variant==='drawback_chess'){
+        e.preventDefault();
+        drawbackAdminMode = !drawbackAdminMode;
+        if(!drawbackAdminMode) drawbackPickerColor=null;
+        render();
+      }
+      else if(e.key==='F2' && variant==='drawback_chess' && drawbackAdminMode){
+        e.preventDefault();
+        drawbackPickerColor = 'w';
+        render();
+      }
+      else if(e.key==='F3' && variant==='drawback_chess' && drawbackAdminMode){
+        e.preventDefault();
+        drawbackPickerColor = 'b';
+        render();
+      }
     });
   }
 
@@ -576,7 +613,15 @@ function createChessVariant(variant, displayName){
       const winnerColor = status.result.includes('White wins') ? 'w' : (status.result.includes('Black wins') ? 'b' : null);
       if(winnerColor){
         const humanWon = mode==='ai' ? winnerColor!==aiColor : (mode==='online' ? winnerColor===myColor : true);
-        if(humanWon) (typeof Achievements!=='undefined'&&Achievements.unlock('chess_checkmate'));
+        if(humanWon){
+          (typeof Achievements!=='undefined'&&Achievements.unlock('chess_checkmate'));
+          const variantAchievement = {
+            atomic_chess:'atomic_win', king_of_the_hill:'king_of_the_hill_win',
+            combo_chess:'combo_win', tempo_chess:'tempo_win'
+          }[variant];
+          if(variantAchievement) (typeof Achievements!=='undefined'&&Achievements.unlock(variantAchievement));
+          (typeof Achievements!=='undefined'&&Achievements.markChessVariantWon&&Achievements.markChessVariantWon(variant));
+        }
       }
     } else if(aiThinking){
       msg.textContent = 'AI is thinking...';
@@ -586,6 +631,16 @@ function createChessVariant(variant, displayName){
       if(variant==='dice_chess'){
         const remaining = Object.keys(diceRemaining).filter(t=>diceRemaining[t]>0).map(t=>`${typeName(t)}×${diceRemaining[t]}`).join(', ');
         extra += `  •  Rolled: ${diceValues.map(typeName).join(', ')}  •  Still available: ${remaining||'none'}`;
+      }
+      if(variant==='combo_chess' && state.mustContinueFrom){
+        extra += ' — chain! keep capturing with the same piece';
+      }
+      if(variant==='tempo_chess'){
+        if(state.inBonusMove) extra += ' — bonus move!';
+        else {
+          const untilBonus = 4 - ((state.moveCounts[state.turn]||0) % 4);
+          extra += `  •  Bonus move in ${untilBonus}`;
+        }
       }
       msg.textContent = `${turnLabel} to move${extra}  •  Move ${Math.floor(state.history.length/2)+1}`;
     }
@@ -598,6 +653,7 @@ function createChessVariant(variant, displayName){
       // visible to them). Everything is revealed once the game ends.
       const humanColor = mode==='ai' ? (aiColor==='w'?'b':'w') : (mode==='online' ? myColor : null);
       function visibleTo(color){
+        if(drawbackAdminMode) return true;
         if(status.over) return true;
         if(mode==='ai' || mode==='online') return color===humanColor;
         return color===state.turn;
@@ -606,9 +662,64 @@ function createChessVariant(variant, displayName){
       const wIsAI = mode==='ai' && aiColor==='w';
       const bIsAI = mode==='ai' && aiColor==='b';
       drawbackEl.innerHTML = `
+        ${drawbackAdminMode ? '<div style="color:var(--red);font-weight:700;margin-bottom:4px;">⚙ ADMIN MODE — both drawbacks revealed  •  F2 choose White\'s  •  F3 choose Black\'s  •  F1 to exit</div>' : ''}
         <div>♔ White${wIsAI?' (AI)':''}: <b>${wVisible ? state.drawbacks.w.name : '❓ Secret'}</b>${wVisible?' — '+state.drawbacks.w.desc:''}</div>
         <div>♚ Black${bIsAI?' (AI)':''}: <b>${bVisible ? state.drawbacks.b.name : '❓ Secret'}</b>${bVisible?' — '+state.drawbacks.b.desc:''}</div>
       `;
+    }
+    const pickerEl = container.querySelector('.chess-drawback-picker');
+    if(pickerEl && variant==='drawback_chess'){
+      if(drawbackPickerColor){
+        const colorLabel = drawbackPickerColor==='w' ? 'White' : 'Black';
+        pickerEl.style.display='flex';
+        pickerEl.innerHTML = `
+          <div style="background:var(--panel,#1a1a2e);border:1px solid var(--border,#3a3a55);border-radius:10px;max-width:440px;width:100%;max-height:82vh;display:flex;flex-direction:column;">
+            <div style="padding:12px;border-bottom:1px solid var(--border,#3a3a55);display:flex;justify-content:space-between;align-items:center;">
+              <b>Choose ${colorLabel}'s Drawback</b>
+              <button class="btn" id="drawback-picker-close" type="button">✕</button>
+            </div>
+            <div style="padding:10px 10px 0;">
+              <input id="drawback-picker-search" type="text" placeholder="Search ${DRAWBACKS.length} drawbacks…" autocomplete="off" style="width:100%;box-sizing:border-box;padding:7px 9px;border-radius:6px;border:1px solid var(--border,#3a3a55);background:var(--panel2,#11111f);color:var(--text,#fff);font-size:0.9rem;">
+            </div>
+            <div id="drawback-picker-list" style="overflow-y:auto;padding:10px;flex:1;"></div>
+          </div>
+        `;
+        const listEl = pickerEl.querySelector('#drawback-picker-list');
+        const searchEl = pickerEl.querySelector('#drawback-picker-search');
+        const closeBtn = pickerEl.querySelector('#drawback-picker-close');
+        const closePicker = ()=>{ drawbackPickerColor=null; render(); };
+        function renderPickerList(filterText){
+          const q = (filterText||'').trim().toLowerCase();
+          const matches = DRAWBACKS.filter(d=> !q || d.name.toLowerCase().includes(q) || d.desc.toLowerCase().includes(q));
+          const currentId = state.drawbacks[drawbackPickerColor] && state.drawbacks[drawbackPickerColor].id;
+          listEl.innerHTML = matches.length ? matches.map(d=>`
+            <button type="button" class="drawback-picker-item" data-id="${d.id}" style="display:block;width:100%;text-align:left;padding:8px 10px;margin-bottom:5px;border-radius:6px;border:1px solid ${d.id===currentId?'var(--yellow,#ffd700)':'var(--border,#3a3a55)'};background:var(--panel2,#11111f);color:var(--text,#fff);cursor:pointer;">
+              <b>${d.name}</b>${d.id===currentId?' <span style="color:var(--yellow,#ffd700);font-size:0.75rem;">(current)</span>':''}<div style="font-size:0.78rem;color:var(--dim);margin-top:2px;">${d.desc}</div>
+            </button>`).join('') : `<div style="color:var(--dim);text-align:center;padding:24px;">No drawbacks match "${filterText}".</div>`;
+          listEl.querySelectorAll('.drawback-picker-item').forEach(btn=>{
+            btn.addEventListener('click', ()=>{
+              const def = DRAWBACKS.find(d=>d.id===btn.dataset.id);
+              if(def) state.drawbacks[drawbackPickerColor] = instantiateDrawback(def);
+              closePicker();
+            });
+          });
+        }
+        renderPickerList('');
+        searchEl.addEventListener('input', ()=>renderPickerList(searchEl.value));
+        // The global keyboard listener ignores keydowns while an INPUT is
+        // focused (so normal typing isn't hijacked), which would otherwise
+        // let Escape fall all the way through to the site-wide Esc-to-hub
+        // handler while the admin is typing in this search box. Handle it
+        // here instead, and stop it from bubbling any further.
+        searchEl.addEventListener('keydown', e=>{
+          if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); closePicker(); }
+        });
+        closeBtn.addEventListener('click', closePicker);
+        searchEl.focus();
+      } else {
+        pickerEl.style.display='none';
+        pickerEl.innerHTML='';
+      }
     }
     const capturedEl = container.querySelector('.chess-captured');
     if(capturedEl){
@@ -700,10 +811,11 @@ function createChessVariant(variant, displayName){
           <div class="chess-board" aria-label="Chess board" role="grid" style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));grid-template-rows:repeat(8,minmax(0,1fr));width:min(92vw,352px);aspect-ratio:1;border:2px solid #3a3a55;"></div>
           <div class="chess-promo" style="display:none;gap:8px;justify-content:center;margin-top:10px;"></div>
           <div class="chess-history-wrap"><div class="history-head"><div class="history-title">Move History</div><button class="history-copy" id="chess-copy-history" type="button">Copy</button></div><div class="chess-history" aria-label="Move history"></div></div>
-          <div class="controls-hint">Click or focus a piece, then choose a highlighted square. Enter/Space also works. F flips the board; Esc clears selection.${variant==='fischer_random'?' Fischer Random uses the simplified no-castling rules.':' Castling: move the king two squares toward the rook.'}${variant==='antichess'?' Captures are mandatory, so castling is only available when no capture is forced.':''}${(variant==='dice_chess'||variant==='drawback_chess')?' King-capture rules — no check/checkmate; capture the king directly to win.':''}</div>
+          <div class="controls-hint">Click or focus a piece, then choose a highlighted square. Enter/Space also works. F flips the board; Esc clears selection.${variant==='fischer_random'?' Fischer Random uses the simplified no-castling rules.':' Castling: move the king two squares toward the rook.'}${variant==='antichess'?' Captures are mandatory, so castling is only available when no capture is forced.':''}${(variant==='dice_chess'||variant==='drawback_chess')?' King-capture rules — no check/checkmate; capture the king directly to win.':''}${variant==='atomic_chess'?' Any capture explodes the surrounding squares (pawns spared) — blow up either king to win, but don\'t blow up your own.':''}${variant==='king_of_the_hill'?' Marching your king onto one of the four center squares is an instant win, on top of normal checkmate.':''}${variant==='combo_chess'?' Capture with a piece that can immediately capture again, and it must keep going — chain captures for extra turns.':''}${variant==='tempo_chess'?' Every 4th move earns you an immediate bonus move before it\'s your opponent\'s turn.':''}${variant==='drawback_chess'?' F1 toggles admin mode (reveals both drawbacks; F2/F3 open a picker to choose White\'s/Black\'s drawback).':''}</div>
           <div class="chess-actions"><button class="btn" id="chess-undo" type="button">↶ Undo</button><button class="btn" id="chess-redo" type="button">↷ Redo</button><button class="btn" id="chess-flip" type="button">⇅ Flip Board</button><button class="btn" id="chess-restart" style="margin-top:8px;">New Game</button></div>
         </div>
       </div>
+      ${variant==='drawback_chess' ? '<div class="chess-drawback-picker" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;"></div>' : ''}
     `;
     const style = document.createElement('style');
     style.textContent = `.chess-sq{width:auto;height:auto;min-width:0;min-height:0;display:flex;align-items:center;justify-content:center;font-size:clamp(1.15rem,5vw,1.9rem);cursor:pointer;user-select:none;position:relative;}
@@ -786,3 +898,7 @@ registerGame('antichess','Antichess','🔻', true, createChessVariant('antichess
 registerGame('dice_chess','Dice Chess','🎯', true, createChessVariant('dice_chess','Dice Chess'), null, true);
 registerGame('spell_chess','Spell Chess','✨', true, createChessVariant('spell_chess','Spell Chess'), null, true);
 registerGame('drawback_chess','Drawback Chess','🎭', true, createChessVariant('drawback_chess','Drawback Chess'), null, true);
+registerGame('atomic_chess','Atomic Chess','💥', true, createChessVariant('atomic_chess','Atomic Chess'), null, true);
+registerGame('king_of_the_hill','King of the Hill','⛰️', true, createChessVariant('king_of_the_hill','King of the Hill'), null, true);
+registerGame('combo_chess','Combo Chess','🔗', true, createChessVariant('combo_chess','Combo Chess'), null, true);
+registerGame('tempo_chess','Tempo Chess','⏱️', true, createChessVariant('tempo_chess','Tempo Chess'), null, true);

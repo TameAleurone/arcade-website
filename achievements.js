@@ -1,15 +1,4 @@
-/* SHARED ACHIEVEMENTS — cross-game unlock tracking.
-   Every game calls Achievements.unlock('some_id') at a milestone (see the
-   DEFS list below for the full catalog). unlock() is idempotent and safe
-   to call every frame/every game-over — it only actually unlocks (persists
-   + shows a toast) the first time. The Stats & Achievements hub page reads
-   Achievements.list() to show every achievement, locked or not.
-   Storage rides on the existing Store (main.js) — just one more
-   localStorage-backed key, same as every game's own high score. */
 const Achievements = (function(){
-  // Single source of truth for the whole arcade. `game` must match the id
-  // passed to that game's registerGame() call, so the hub page can group
-  // achievements under the right game and link to it.
   const DEFS = [
     // Snake
     {id:'snake_score_10', game:'snake', title:'First Bite', desc:'Score 10 in Snake.', icon:'🐍'},
@@ -67,9 +56,38 @@ const Achievements = (function(){
     // antichess, dice_chess, spell_chess, drawback_chess all share this id
     // via variant-ui.js — one checkmate in any of them unlocks it).
     {id:'chess_checkmate', game:'chess', title:'Checkmate!', desc:'Win a game of Chess (or any variant) by checkmate.', icon:'♟️'},
-    // Three Player Chess
+    // The four newest chess variants each also unlock chess_checkmate above
+    // (a win is a win), plus their own variant-specific achievement.
+    {id:'atomic_win', game:'atomic_chess', title:'Chain Reaction', desc:'Win a game of Atomic Chess by exploding the enemy king.', icon:'💥'},
+    {id:'king_of_the_hill_win', game:'king_of_the_hill', title:'King of the Hill', desc:'Win a game of King of the Hill by marching your king to the center.', icon:'⛰️'},
+    {id:'combo_win', game:'combo_chess', title:'Combo Breaker', desc:'Win a game of Combo Chess.', icon:'🔗'},
+    {id:'tempo_win', game:'tempo_chess', title:'Extra Tempo', desc:'Win a game of Tempo Chess.', icon:'⏱️'},
     {id:'three_player_chess_win', game:'three_player_chess', title:'Triple Threat', desc:'Win a game of Three Player Chess.', icon:'♟️'},
+    {id:'three_player_chess_beat_2ai', game:'three_player_chess', title:'Outnumbered', desc:'Win a game of Three Player Chess against two AI opponents.', icon:'♟️'},
+    // Capstone — win at least once in every chess variant the arcade offers.
+    {id:'chess_connoisseur', game:'chess', title:'Chess Connoisseur', desc:'Win at least one game in every chess variant.', icon:'👑'},
+    // Pong
+    {id:'pong_beat_hard_ai', game:'pong', title:'Rally Master', desc:'Beat the Hard AI in Pong.', icon:'🏓'},
+    {id:'pong_shutout', game:'pong', title:'Shutout', desc:'Win a Pong match without the AI scoring a point.', icon:'🏓'},
+    // Connect Four
+    {id:'connect_four_beat_hard_ai', game:'connect_four', title:'Outsmarted', desc:'Beat the Hard AI in Connect Four.', icon:'🔴'},
+    // Tic Tac Toe
+    {id:'tictactoe_draw_hard_ai', game:'tictactoe', title:'Draw with the Unbeatable', desc:'Draw a game against the Hard AI in Tic Tac Toe (it never loses).', icon:'⭕'},
+    // Wheel of Fortune
+    {id:'wheel_streak_10', game:'wheel', title:'Hot Streak', desc:'Reach a 10-spin streak without going bankrupt.', icon:'🎡'},
   ];
+  // Every chess variant that counts toward the Chess Connoisseur capstone
+  // above. Each variant's own code calls markChessVariantWon(variant) on a
+  // human win; this checks whether every one of them has been checked off
+  // yet, across any number of separate games/sessions.
+  const ALL_CHESS_VARIANTS = ['chess','fischer_random','antichess','dice_chess','spell_chess','drawback_chess','atomic_chess','king_of_the_hill','combo_chess','tempo_chess','three_player_chess'];
+  function markChessVariantWon(variant){
+    if(!ALL_CHESS_VARIANTS.includes(variant)) return;
+    const won = new Set(Store.get('chess_variants_won', []));
+    won.add(variant);
+    Store.set('chess_variants_won', [...won]);
+    if(ALL_CHESS_VARIANTS.every(v=>won.has(v))) unlock('chess_connoisseur');
+  }
   const byId = Object.fromEntries(DEFS.map(d=>[d.id,d]));
 
   function unlockedSet(){ return new Set(Store.get('achievements_unlocked', [])); }
@@ -124,5 +142,5 @@ const Achievements = (function(){
     }, 3200);
   }
 
-  return {unlock, isUnlocked, list, progress, DEFS};
+  return {unlock, isUnlocked, list, progress, DEFS, markChessVariantWon};
 })();

@@ -29,7 +29,7 @@
     const cards = byGame.map(g=>{
       const items = all.filter(a=>a.game===g);
       return `<div style="margin-bottom:14px;">
-        <div style="grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;">
+        <div style="grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));gap:8px;">
           ${items.map(achievementCard).join('')}
         </div>
       </div>`;

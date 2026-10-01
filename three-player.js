@@ -170,7 +170,11 @@
     if(state.active.length<=1){
       state.gameOver=true; state.winner=state.active[0]||null;
       const humanWon = state.winner!==null && (state.mode==='hotseat' || state.winner==='0');
-      if(humanWon) (typeof Achievements!=='undefined'&&Achievements.unlock('three_player_chess_win'));
+      if(humanWon){
+        (typeof Achievements!=='undefined'&&Achievements.unlock('three_player_chess_win'));
+        if(state.mode==='ai') (typeof Achievements!=='undefined'&&Achievements.unlock('three_player_chess_beat_2ai'));
+        (typeof Achievements!=='undefined'&&Achievements.markChessVariantWon&&Achievements.markChessVariantWon('three_player_chess'));
+      }
       return;
     }
     let idx = ['0','1','2'].indexOf(state.turn);
