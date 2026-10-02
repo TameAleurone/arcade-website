@@ -373,6 +373,14 @@ const server=http.createServer((req,res)=>{
   if(file !== ROOT && !file.startsWith(ROOT + path.sep)){
     res.writeHead(403); return res.end('Forbidden');
   }
+  // Only serve the public site: never the server source, dotfiles, package
+  // metadata, dev tools, or node_modules that happen to live in the same folder.
+  const relFromRoot = path.relative(ROOT, file).split(path.sep);
+  if(relFromRoot.some(seg => seg.startsWith('.')) ||
+     ['server','node_modules','tools'].includes(relFromRoot[0]) ||
+     /^package(-lock)?\.json$/.test(relFromRoot[0])){
+    res.writeHead(404,{'Content-Type':'text/plain'}); return res.end('Not found');
+  }
   fs.stat(file,(err,st)=>{
     if(err || !st.isFile()){
       res.writeHead(404,{'Content-Type':'text/plain'}); return res.end('Not found');
@@ -381,8 +389,8 @@ const server=http.createServer((req,res)=>{
     const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8',
       '.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8',
       '.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml',
-      '.webp':'image/webp','.ico':'image/x-icon'};
-    res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','Cache-Control':ext==='.html'||ext==='.js'?'no-cache':'public, max-age=3600'});
+      '.webp':'image/webp','.ico':'image/x-icon','.webmanifest':'application/manifest+json'};
+    res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','Cache-Control':ext==='.html'||ext==='.js'?'no-cache':'public, max-age=3600','X-Content-Type-Options':'nosniff'});
     fs.createReadStream(file).pipe(res);
   });
 });
