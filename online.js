@@ -236,7 +236,7 @@
   // rest of this page's lifetime, so a host stuck behind a restrictive
   // CSP isn't re-probing (and waiting on) WebSocket on every "New Game".
   function attemptConnect(action, jsonpParams){
-    const wsActionMsg = action==='join' ? {action:'join', room:jsonpParams.room} : {action};
+    const wsActionMsg = action==='join' ? {action:'join', room:jsonpParams.room} : (action==='host' ? {action, visibility:jsonpParams.visibility, game:jsonpParams.game} : {action});
     const tryWs = ()=>openFreshWs(wsActionMsg);
     const tryJsonp = ()=>openFreshJsonp(action, jsonpParams);
     if(preferredTransport==='jsonp'){
@@ -263,11 +263,11 @@
     }, delay);
   }
 
-  async function host({onMessage,onClose,onConnect,onReconnecting,onReconnected}={}){
+  async function host({onMessage,onClose,onConnect,onReconnecting,onReconnected,visibility='public',game='Multiplayer game'}={}){
     close();
     deliberateClose=false;
     callbacks={onMessage,onClose,onConnect,onReconnecting,onReconnected};
-    return attemptConnect('host', {});
+    return attemptConnect('host', {visibility,game});
   }
 
   async function join(code,{onMessage,onClose,onConnect,onReconnecting,onReconnected}={}){
@@ -303,6 +303,7 @@
 
   window.ArcadeOnline={
     host, join, send,
+    listPublicRooms:async()=>{const r=await fetch(httpBaseUrl()+'/api/lobbies',{cache:'no-store'});if(!r.ok)throw new Error('Could not load public rooms.');return r.json();},
     close,
     isHost:()=>role==='host',
     isGuest:()=>role==='guest',

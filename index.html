@@ -34,7 +34,7 @@
         <div class="section-label">Choose your game</div>
         <p class="section-subtitle">Pick a tile and start playing.</p>
       </div>
-      <div class="toolbar-actions"><button id="random-game" class="random-game" type="button">🎲 Surprise me</button><label class="search-box">
+      <div class="toolbar-actions"><label class="sort-box"><span class="sr-only">Sort games</span><select id="game-sort" aria-label="Sort games"><option value="default">Featured</option><option value="az">Name: A–Z</option><option value="played">Most played</option><option value="recent">Recently played</option></select></label><button id="random-game" class="random-game" type="button">🎲 Surprise me</button><label class="search-box">
         <span aria-hidden="true">⌕</span>
         <input id="game-search" type="search" placeholder="Search games..." autocomplete="off">
       </label></div>
@@ -115,6 +115,7 @@ const categories = {
 };
 
 let activeFilter = 'all';
+const sortSelect = document.getElementById('game-sort');
 const FAVORITES_KEY = 'arcadeHubFavorites';
 function readFavorites() {
   try { return new Set(JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]')); }
@@ -165,6 +166,10 @@ function renderHomeMenu() {
     const matchesSearch = !query || g.name.toLowerCase().includes(query);
     return matchesFilter && matchesSearch;
   });
+  const playCounts = activity.counts || {};
+  if (sortSelect.value === 'az') visible.sort((a,b) => a.name.localeCompare(b.name));
+  if (sortSelect.value === 'played') visible.sort((a,b) => (playCounts[b.id]||0) - (playCounts[a.id]||0) || a.name.localeCompare(b.name));
+  if (sortSelect.value === 'recent') { const rank = new Map((activity.history||[]).map((item,i) => [item.id, i])); visible.sort((a,b) => (rank.has(a.id)?rank.get(a.id):9999) - (rank.has(b.id)?rank.get(b.id):9999) || a.name.localeCompare(b.name)); }
 
   grid.innerHTML = visible.map(g => `
     <a class="tile" href="${g.id}.html" data-category="${categories[g.id] || 'arcade'}" data-game-id="${g.id}">
@@ -210,12 +215,26 @@ filters.forEach(button => {
 });
 
 search.addEventListener('input', renderHomeMenu);
+sortSelect.addEventListener('change', renderHomeMenu);
+// Fast keyboard navigation: / or Ctrl/Cmd+K focuses search; Escape clears it.
+document.addEventListener('keydown', event => {
+  const target = event.target;
+  const typing = target instanceof HTMLElement && (target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(target.tagName));
+  if ((event.key === '/' && !typing) || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k')) {
+    event.preventDefault();
+    search.focus();
+    search.select();
+  } else if (event.key === 'Escape' && document.activeElement === search && search.value) {
+    search.value = '';
+    renderHomeMenu();
+  }
+});
 document.getElementById('random-game').addEventListener('click', () => {
   const query = search.value.trim().toLowerCase();
   const choices = Object.values(Games).filter(g => {
     const category = categories[g.id] || 'arcade';
     return !g.hidden && g.ready &&
-      (activeFilter === 'all' || category === activeFilter) &&
+      (activeFilter === 'all' || (activeFilter === 'favorites' ? favorites.has(g.id) : category === activeFilter)) &&
       (!query || g.name.toLowerCase().includes(query));
   });
   if (!choices.length) {

@@ -740,3 +740,48 @@ canvas{ touch-action:none; }
 @media(prefers-reduced-motion:reduce) {
  .homepage *, .homepage *::before, .homepage *::after {scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
+
+
+/* Accessibility polish: clear keyboard focus and respect reduced-motion settings. */
+:where(a, button, input, select, textarea):focus-visible{
+  outline:3px solid var(--yellow);
+  outline-offset:3px;
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    scroll-behavior:auto !important;
+    animation-duration:0.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:0.01ms !important;
+  }
+}
+
+/* Extra homepage finish: clearer hierarchy, responsive controls, and motion-safe feedback. */
+.homepage .toolbar-actions { flex-wrap:wrap; }
+.homepage .search-box:focus-within { border-color:var(--cyan); box-shadow:0 0 0 3px rgba(80,200,255,.12); }
+.homepage .filter { transition:background .16s ease,border-color .16s ease,transform .16s ease; }
+.homepage .filter:active,.homepage .random-game:active { transform:translateY(1px); }
+.homepage #results-note { min-height:1.2em; }
+.homepage .tile:focus-visible { outline:3px solid var(--yellow); outline-offset:3px; }
+.homepage .tile .favorite-toggle { z-index:2; }
+@media(max-width:700px) {
+  .homepage .toolbar { align-items:stretch; gap:14px; }
+  .homepage .toolbar-actions { width:100%; }
+  .homepage .search-box { flex:1 1 180px; }
+  .homepage .random-game { flex:0 0 auto; }
+  .homepage .filters { gap:7px; }
+  .homepage .filter { padding:7px 10px; font-size:.78rem; }
+}
+@media(max-width:420px) {
+  .homepage #app { padding-left:12px; padding-right:12px; }
+  .homepage .random-game { flex:1 1 100%; }
+  .homepage .search-box { flex-basis:100%; }
+  .homepage #menu-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .homepage .tile { padding:16px 12px; }
+}
+
+/* Game sorting control */
+.homepage .sort-box { display:inline-flex; align-items:center; }
+.homepage .sort-box select { min-height:42px; max-width:150px; padding:0 30px 0 12px; border:1px solid var(--line,rgba(255,255,255,.14)); border-radius:10px; background:rgba(255,255,255,.045); color:inherit; font:inherit; cursor:pointer; }
+.homepage .sort-box select option { background:#171722; color:#fff; }
+@media (max-width:560px) { .homepage .sort-box { flex:1 1 100%; } .homepage .sort-box select { width:100%; max-width:none; } }
