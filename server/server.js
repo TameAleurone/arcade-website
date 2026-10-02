@@ -190,7 +190,7 @@ function handleJsonp(req, res, pathname, params){
     const newCode=roomCode();
     const hostToken=makeToken();
     const peer={kind:'jsonp', token:hostToken, queue:[], lastSeen:Date.now(), waiter:null};
-    rooms.set(newCode,{code:newCode, host:peer, guest:null, hostToken, latestState:null});
+    rooms.set(newCode,{code:newCode, host:peer, guest:null, hostToken, latestState:null, visibility:params.get('visibility')==='private'?'private':'public', game:String(params.get('game')||'Multiplayer game').slice(0,40)});
     return respondJsonp(res,cb,{type:'hosted',room:newCode,token:hostToken});
   }
 
@@ -357,6 +357,12 @@ const server=http.createServer((req,res)=>{
   try { parsedUrl = new URL(req.url, `http://${req.headers.host}`); pathname = decodeURIComponent(parsedUrl.pathname); }
   catch { res.writeHead(400); return res.end('Bad request'); }
 
+  if(pathname==='/api/lobbies'){
+    const list=[...rooms.values()].filter(r=>r.visibility==='public' && r.host && !r.guest).map(r=>({code:r.code,game:r.game||'Multiplayer game',players:r.guest?2:1,maxPlayers:2}));
+    res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store','Access-Control-Allow-Origin':'*'});
+    return res.end(JSON.stringify({rooms:list}));
+  }
+
   if(pathname==='/health'){
     res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
     return res.end(JSON.stringify({ok:true,rooms:rooms.size}));
@@ -430,7 +436,7 @@ wss.on('connection',(ws)=>{
       const code=roomCode();
       const token=makeToken();
       const peer={kind:'ws', ws};
-      rooms.set(code,{code, host:peer, guest:null, hostToken:token, latestState:null});
+      rooms.set(code,{code, host:peer, guest:null, hostToken:token, latestState:null, visibility:msg.visibility==='private'?'private':'public', game:String(msg.game||'Multiplayer game').slice(0,40)});
       ws.roomCode=code; ws.role='host'; ws.peer=peer;
       return wsSend(ws,{type:'hosted',room:code,token});
     }
