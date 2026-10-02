@@ -69,7 +69,8 @@ function bootGame(id){
   if(titleEl) titleEl.textContent = g.name;
   g.module.init(container);
   window.dispatchEvent(new Event('arcadegamebooted'));
-  window.addEventListener('beforeunload', ()=>{ if(g.module.destroy) g.module.destroy(); });
+  // pagehide fires reliably on mobile and with the back/forward cache; beforeunload doesn't.
+  window.addEventListener('pagehide', ()=>{ if(g.module.destroy) g.module.destroy(); });
 }
 
 /**
@@ -82,7 +83,12 @@ function setupEscapeToHub(){
   const backHref = document.body.dataset.backHref;
   if(!backHref) return; // not a game page (e.g. index.html)
   document.addEventListener('keydown', (e)=>{
-    if(e.key==='Escape') window.location.href = backHref;
+    if(e.key!=='Escape' || e.defaultPrevented) return;
+    // Don't leave the page while typing, or when Esc is just exiting fullscreen.
+    const t = e.target;
+    if(t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if(document.fullscreenElement) return;
+    window.location.href = backHref;
   });
 }
 setupEscapeToHub();

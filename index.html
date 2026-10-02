@@ -8,6 +8,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Monoton&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#0b0b12">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body class="homepage">
@@ -30,21 +34,32 @@
         <div class="section-label">Choose your game</div>
         <p class="section-subtitle">Pick a tile and start playing.</p>
       </div>
-      <label class="search-box">
+      <div class="toolbar-actions"><button id="random-game" class="random-game" type="button">🎲 Surprise me</button><label class="search-box">
         <span aria-hidden="true">⌕</span>
         <input id="game-search" type="search" placeholder="Search games..." autocomplete="off">
-      </label>
+      </label></div>
     </div>
 
     <div class="filters" role="group" aria-label="Game categories">
-      <button class="filter active" data-filter="all">All games</button>
-      <button class="filter" data-filter="arcade">Arcade</button>
-      <button class="filter" data-filter="puzzle">Puzzle</button>
-      <button class="filter" data-filter="action">Action</button>
-      <button class="filter" data-filter="multiplayer">Multiplayer</button>
-      <button class="filter" data-filter="chess">Chess</button>
+      <button class="filter active" data-filter="all" aria-pressed="true">All games</button>
+      <button class="filter" data-filter="favorites" aria-pressed="false">♥ Favorites</button>
+      <button class="filter" data-filter="arcade" aria-pressed="false">Arcade</button>
+      <button class="filter" data-filter="puzzle" aria-pressed="false">Puzzle</button>
+      <button class="filter" data-filter="action" aria-pressed="false">Action</button>
+      <button class="filter" data-filter="multiplayer" aria-pressed="false">Multiplayer</button>
+      <button class="filter" data-filter="chess" aria-pressed="false">Chess</button>
     </div>
 
+    <section class="player-panel" aria-label="Player dashboard">
+      <div class="player-heading"><div><span class="player-kicker">YOUR ARCADE</span><h2>Player dashboard</h2><p>Your local gaming activity, right here.</p></div><span class="player-avatar" aria-hidden="true">🎮</span></div>
+      <div class="player-metrics">
+        <div class="player-metric"><span>Games launched</span><strong id="launch-total">0</strong></div>
+        <div class="player-metric"><span>Unique games</span><strong id="unique-total">0</strong></div>
+        <div class="player-metric"><span>Favorites</span><strong id="favorite-total">0</strong></div>
+      </div>
+      <div class="recent-row"><div><strong>Recently played</strong><span id="recent-caption">Your latest games appear here.</span></div><div id="recent-games" class="recent-games"></div></div>
+      <button id="clear-activity" class="clear-activity" type="button">Clear activity</button>
+    </section>
     <div id="results-note" class="results-note" aria-live="polite"></div>
     <div id="menu-grid"></div>
     <div id="no-results" class="no-results hidden">
@@ -100,19 +115,60 @@ const categories = {
 };
 
 let activeFilter = 'all';
+const FAVORITES_KEY = 'arcadeHubFavorites';
+function readFavorites() {
+  try { return new Set(JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]')); }
+  catch { return new Set(); }
+}
+let favorites = readFavorites();
 
+const ACTIVITY_KEY = 'arcadeHubActivity';
+function readActivity() {
+  try { const data=JSON.parse(localStorage.getItem(ACTIVITY_KEY)||'{}'); return data && typeof data==='object' ? data : {}; }
+  catch { return {}; }
+}
+let activity = readActivity();
+function recordLaunch(id) {
+  const history=Array.isArray(activity.history)?activity.history:[];
+  history.unshift({id, at:Date.now()});
+  activity.history=history.slice(0,30);
+  activity.counts=activity.counts||{};
+  activity.counts[id]=(activity.counts[id]||0)+1;
+  try { localStorage.setItem(ACTIVITY_KEY,JSON.stringify(activity)); } catch {}
+}
+function updateDashboard() {
+  const history=Array.isArray(activity.history)?activity.history:[];
+  document.getElementById('launch-total').textContent=Object.values(activity.counts||{}).reduce((a,b)=>a+b,0);
+  document.getElementById('unique-total').textContent=Object.keys(activity.counts||{}).length;
+  document.getElementById('favorite-total').textContent=favorites.size;
+  const recent=[...new Set(history.map(x=>x.id))].slice(0,4);
+  const recentEl=document.getElementById('recent-games');
+  recentEl.innerHTML='';
+  recent.forEach(id=>{
+    const game=Games[id]; if(!game) return;
+    const a=document.createElement('a'); a.className='recent-game'; a.href=id+'.html';
+    a.innerHTML=`<span>${game.icon}</span><span>${game.name}</span>`;
+    recentEl.appendChild(a);
+  });
+  document.getElementById('recent-caption').textContent=recent.length ? 'Jump back into a recent game.' : 'Play a game and it will show up here.';
+}
+document.getElementById('clear-activity').addEventListener('click',()=>{
+  if(!confirm('Clear your local play history and launch counts?')) return;
+  activity={}; try{localStorage.removeItem(ACTIVITY_KEY);}catch{} updateDashboard();
+});
 function renderHomeMenu() {
   const query = search.value.trim().toLowerCase();
   const games = Object.values(Games).filter(g => !g.hidden && g.ready);
   const visible = games.filter(g => {
     const category = categories[g.id] || 'arcade';
-    const matchesFilter = activeFilter === 'all' || category === activeFilter;
+    const matchesFilter = activeFilter === 'all' || (activeFilter === 'favorites' ? favorites.has(g.id) : category === activeFilter);
     const matchesSearch = !query || g.name.toLowerCase().includes(query);
     return matchesFilter && matchesSearch;
   });
 
   grid.innerHTML = visible.map(g => `
-    <a class="tile" href="${g.id}.html" data-category="${categories[g.id] || 'arcade'}">
+    <a class="tile" href="${g.id}.html" data-category="${categories[g.id] || 'arcade'}" data-game-id="${g.id}">
+      <button class="favorite-toggle ${favorites.has(g.id) ? 'is-favorite' : ''}" type="button" aria-label="${favorites.has(g.id) ? 'Remove' : 'Add'} ${g.name} ${favorites.has(g.id) ? 'from' : 'to'} favorites" aria-pressed="${favorites.has(g.id)}">${favorites.has(g.id) ? '♥' : '♡'}</button>
       <span class="badge">PLAY <span class="arrow">↗</span></span>
       <span class="icon-wrap"><span class="icon">${g.icon}</span></span>
       <span class="name">${g.name}</span>
@@ -127,18 +183,49 @@ function renderHomeMenu() {
     ? `${games.length} games ready to play`
     : `${visible.length} ${visible.length === 1 ? 'game' : 'games'} shown`;
   noResults.classList.toggle('hidden', visible.length !== 0);
+  updateDashboard();
 }
 
+grid.addEventListener('click', event => {
+  const gameLink=event.target.closest('a.tile');
+  if (gameLink && !event.target.closest('.favorite-toggle')) recordLaunch(gameLink.dataset.gameId);
+  const toggle = event.target.closest('.favorite-toggle');
+  if (!toggle) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const tile = toggle.closest('[data-game-id]');
+  const id = tile.dataset.gameId;
+  if (favorites.has(id)) favorites.delete(id); else favorites.add(id);
+  try { localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites])); } catch {}
+  renderHomeMenu();
+});
 filters.forEach(button => {
   button.addEventListener('click', () => {
-    filters.forEach(b => b.classList.remove('active'));
+    filters.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
     button.classList.add('active');
+    button.setAttribute('aria-pressed', 'true');
     activeFilter = button.dataset.filter;
     renderHomeMenu();
   });
 });
 
 search.addEventListener('input', renderHomeMenu);
+document.getElementById('random-game').addEventListener('click', () => {
+  const query = search.value.trim().toLowerCase();
+  const choices = Object.values(Games).filter(g => {
+    const category = categories[g.id] || 'arcade';
+    return !g.hidden && g.ready &&
+      (activeFilter === 'all' || category === activeFilter) &&
+      (!query || g.name.toLowerCase().includes(query));
+  });
+  if (!choices.length) {
+    search.focus();
+    return;
+  }
+  const chosen = choices[Math.floor(Math.random() * choices.length)];
+  recordLaunch(chosen.id);
+  window.location.href = `${chosen.id}.html`;
+});
 renderHomeMenu();
 </script>
 </body>

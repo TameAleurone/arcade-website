@@ -518,14 +518,6 @@ const DRAWBACKS = (function(){
     });
   });
   add('bridge_over_troubled_water','Bridge Over Troubled Water',"There's a river across the middle two ranks — cross only via the center two files.", (moves)=>moves.filter(m=>{
-    // Knights/kings/pawns cross freely (they don't slide through the river,
-    // they hop or step onto it). Sliding pieces (B/R/Q) must have every
-    // square they pass through *and land on* within the river be in one of
-    // the two center files — this used to instead reject any destination
-    // on the river outright, even one reached via the center files, which
-    // made a piece landing mid-bridge (rather than only passing over it)
-    // always illegal and left the "except via the center files" half of
-    // this drawback's own description doing nothing.
     if(m.piece[1]==='N'||m.piece[1]==='K'||m.piece[1]==='P') return true;
     const dr=Math.sign(m.tr-m.fr), dc=Math.sign(m.tc-m.fc);
     let r=m.fr,c=m.fc;
@@ -642,15 +634,6 @@ const DRAWBACKS = (function(){
     const after = H.afterMove(ctx.state, m);
     return H.isAttackedBy(after, m.tr, m.tc, ctx.color);
   }));
-  // This used to require moving the king into check when possible — but a
-  // legal move can never leave your own king in check (that's what makes
-  // it legal), so `moves` here could never contain such a move in the
-  // first place: the condition was unsatisfiable by construction. Verified
-  // empirically too — checked across 2,389 real positions (4,806 legal
-  // king moves total) from 60 simulated games and it never once
-  // restricted anything. Re-scoped to any piece walking into an attacked
-  // square, which keeps the "reckless" theme but is actually reachable
-  // under real chess rules (moving into an attack is legal, just risky).
   add('death_wish','Death Wish',"If you can move a piece to a square the opponent attacks, you must.", (moves,ctx)=>{
     const oppo = ctx.color==='w'?'b':'w';
     return H.requireIfPossible(moves, m=>{
@@ -760,7 +743,7 @@ const DRAWBACKS = (function(){
     return moves.filter(m=>!m.promotion || m.promotion===chosen);
   });
 
-  // --- New drawbacks ---
+  // --- Drawbacks I came up with myself not from drawback chess ---
   add('creature_of_habit','Creature of Habit',"If possible, you must land on the same color square (light/dark) as your last move.", (moves,ctx)=>{
     const last = H.lastMoveByColor(ctx.history, ctx.color);
     if(!last) return moves;
@@ -799,7 +782,6 @@ const DRAWBACKS = (function(){
     return moves.filter(m=>!m.capture);
   });
 
-  // --- New drawbacks, round 2 ---
   add('one_and_done','One and Done',"You can't move the same piece twice in a row.", (moves,ctx)=>{
     const last = H.lastMoveByColor(ctx.history, ctx.color);
     if(!last) return moves;
@@ -913,12 +895,6 @@ function assignDrawback(){
   const def = DRAWBACKS[Math.floor(Math.random()*DRAWBACKS.length)];
   return instantiateDrawback(def);
 }
-// The actual fairness fix: draw both players' drawbacks from the *same*
-// severity tier, so a game might be a mild one for both, a brutal one for
-// both, or anything in between — but never a coin-flip blowout where one
-// side plays a real game and the other is just along for the ride. Each
-// side still gets its own independent random pick within that tier, so the
-// specific pairing is still a surprise; only the harshness band is shared.
 function assignDrawbackPair(){
   const tiers = [1,2,3,4];
   const tier = tiers[Math.floor(Math.random()*tiers.length)];

@@ -1,34 +1,3 @@
-/* ARCADE ONLINE MULTIPLAYER
-   Two transports behind one API. The game code remains authoritative:
-   chess/Pong/board games validate moves on the host and broadcast state.
-
-   WebSocket is tried first — it's a real persistent connection, lowest
-   latency. Some static hosts, though (Neocities' free tier is the common
-   one), send every page a Content-Security-Policy with `connect-src
-   'self'`, which blocks fetch, XHR, *and* WebSocket to any other origin.
-   That's a server-sent header the page can't loosen itself, so if the
-   WebSocket attempt fails this module falls back automatically to a
-   JSONP long-poll transport (data delivered as the body of a
-   <script src="..."> tag, which isn't subject to connect-src at all —
-   the standard workaround for this exact restriction). Every JSONP
-   request — including sending a move, not just host/join/poll — uses this
-   same <script src> GET technique; an earlier version sent outbound
-   messages via a cross-origin HTML form POST instead, which turned out to
-   be blocked too, since those same restrictive hosts also send
-   `form-action 'self'`. Once one transport has worked in this page's
-   lifetime it's tried first on later host()/join() calls, so a "New Game"
-   doesn't re-probe WebSocket every time on a host that's never going to
-   allow it.
-
-   Auto-reconnect: if the connection drops unexpectedly (phone lost
-   signal, the tab was backgrounded and the OS killed the connection,
-   brief wifi blip) this module quietly tries to re-establish the same
-   room a few times before giving up — a guest just re-joins the still-
-   open room, and a host "reclaims" it with a one-time token issued when
-   they first hosted, since the server has no other way to know a fresh
-   connection is the same person who was hosting a moment ago. This
-   works the same way regardless of which transport is in use.
-*/
 (function(){
   const RECONNECT_MAX_ATTEMPTS = 6;
   const RECONNECT_BASE_DELAY_MS = 900;

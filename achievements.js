@@ -52,12 +52,7 @@ const Achievements = (function(){
     {id:'connect_four_win', game:'connect_four', title:'Four in a Row', desc:'Win a game of Connect Four.', icon:'🔴'},
     // Tic Tac Toe
     {id:'tictactoe_win', game:'tictactoe', title:'Tic-Tac Champion', desc:'Win a game of Tic Tac Toe.', icon:'⭕'},
-    // Chess & every variant that shares the same engine (fischer_random,
-    // antichess, dice_chess, spell_chess, drawback_chess all share this id
-    // via variant-ui.js — one checkmate in any of them unlocks it).
     {id:'chess_checkmate', game:'chess', title:'Checkmate!', desc:'Win a game of Chess (or any variant) by checkmate.', icon:'♟️'},
-    // The four newest chess variants each also unlock chess_checkmate above
-    // (a win is a win), plus their own variant-specific achievement.
     {id:'atomic_win', game:'atomic_chess', title:'Chain Reaction', desc:'Win a game of Atomic Chess by exploding the enemy king.', icon:'💥'},
     {id:'king_of_the_hill_win', game:'king_of_the_hill', title:'King of the Hill', desc:'Win a game of King of the Hill by marching your king to the center.', icon:'⛰️'},
     {id:'combo_win', game:'combo_chess', title:'Combo Breaker', desc:'Win a game of Combo Chess.', icon:'🔗'},
@@ -76,10 +71,6 @@ const Achievements = (function(){
     // Wheel of Fortune
     {id:'wheel_streak_10', game:'wheel', title:'Hot Streak', desc:'Reach a 10-spin streak without going bankrupt.', icon:'🎡'},
   ];
-  // Every chess variant that counts toward the Chess Connoisseur capstone
-  // above. Each variant's own code calls markChessVariantWon(variant) on a
-  // human win; this checks whether every one of them has been checked off
-  // yet, across any number of separate games/sessions.
   const ALL_CHESS_VARIANTS = ['chess','fischer_random','antichess','dice_chess','spell_chess','drawback_chess','atomic_chess','king_of_the_hill','combo_chess','tempo_chess','three_player_chess'];
   function markChessVariantWon(variant){
     if(!ALL_CHESS_VARIANTS.includes(variant)) return;
@@ -95,9 +86,9 @@ const Achievements = (function(){
 
   function unlock(id){
     const def = byId[id];
-    if(!def) return false; // unknown id — fail quietly rather than break the calling game
+    if(!def) return false;
     const set = unlockedSet();
-    if(set.has(id)) return false; // already unlocked, nothing to do
+    if(set.has(id)) return false; 
     set.add(id);
     saveUnlockedSet(set);
     toast(def);
@@ -115,9 +106,6 @@ const Achievements = (function(){
     return {unlocked:count, total:DEFS.length};
   }
 
-  // Small toast queue so unlocking several achievements at once (e.g. a
-  // score threshold and a win condition on the same frame) doesn't clobber
-  // one notification with another — they show one after another instead.
   let toastQueue=[], toastShowing=false;
   function toast(def){
     toastQueue.push(def);

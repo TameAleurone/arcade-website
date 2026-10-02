@@ -40,9 +40,6 @@
   }
   let wingPhase=0;
   function loop(ts){
-    // Real elapsed time since last frame, clamped for backgrounded-tab
-    // safety, instead of assuming 60fps. Gravity/pipe speed were running
-    // proportionally faster on any display refreshing above 60Hz.
     const dt = lastTs!=null ? Math.min(1/20, (ts-lastTs)/1000) : 1/60;
     lastTs = ts;
     if(started && !gameOver) wingPhase += dt*9;

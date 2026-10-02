@@ -1,4 +1,4 @@
-const CACHE_NAME = 'arcade-v9';
+const CACHE_NAME = 'arcade-v10';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -36,14 +36,15 @@ const ASSETS_TO_CACHE = [
   './two_player_hub.html',
   './wheel.html',
   './breakout.js',
-  './chess_tests.js',
   './clicker.js',
   './connectfour.js',
   './dino.js',
   './dodger.js',
   './drawbacks.js',
   './dwarves.js',
+  './achievements.js',
   './engine.js',
+  './game-quality.js',
   './flyer.js',
   './game2048.js',
   './hub.js',
@@ -67,6 +68,10 @@ const ASSETS_TO_CACHE = [
   './variant-ui.js',
   './wheel.js',
   './style.css',
+  './apple-touch-icon.png',
+  './icon-192.png',
+  './icon-512.png',
+  './icon-maskable-512.png',
   './b.png',
   './d_b.png',
   './d_k.png',
@@ -80,7 +85,6 @@ const ASSETS_TO_CACHE = [
   './q.png',
   './r.png',
   './manifest.json',
-  './package.json',
 ];
 
 // Keep HTML and JavaScript fresh so updated game/multiplayer code is used.
@@ -91,7 +95,12 @@ const NETWORK_FIRST_EXTENSIONS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
+    caches.open(CACHE_NAME).then((cache) =>
+      // Add files one by one so a single missing asset can't abort the install.
+      Promise.all(ASSETS_TO_CACHE.map((url) =>
+        cache.add(url).catch((err) => console.warn('SW precache skipped', url, err))
+      ))
+    )
   );
   self.skipWaiting();
 });
